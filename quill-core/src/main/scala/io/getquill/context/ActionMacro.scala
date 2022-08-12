@@ -214,11 +214,23 @@ class ActionMacro(val c: MacroContext)
             // from this: `foreach(people).map(p => insert(p.name, p.age))`
             // into this: `foreach(people).map(p => insert(CaseClassValue("value", value:Person, encoder[Person], quatOf[Person]).name, CCV(...).age)))
             // ReifyLiftings will then turn it
-            // into this: `foreach(people).map(p => insert(CaseClassValue("value", (value:Person).name, encoder[Person], quatOf[Person]), CCV(... (value:Person).age ...))))
+            // into this: `foreach(people).map(p => insert(CaseClassValue("value", (value:Person).name, encoder[String], quatOf[Person]), CCV(... (value:Person).age ...))))
             //
             // (** Note that I mixing the scala-api way of seeing this DSL i.e. foreach instead of ast.Foreach
             // and the regular one i.e CaseClassValue. That's the only way to see what's going on without information-overload.
             // also CCV:=CaseClassValue)
+            //
+            // Note that update cases are more complex:
+            // from this: `foreach(people).map(p => filter(pp => pp.id == p.id).update(p.name, p.age))`
+            // into this: `foreach(people).map(p => filter(pp => pp.id == CCV(value:Person,...)).update(CCV(value:Person,...).name, CCV(...).age)))
+            // ReifyLiftings will then turn it
+            // into this: `foreach(people).map(p => filter(pp => pp.id == CCV((value:Person).id,...).update(CCV((value:Person).name), CCV(... (value:Person).age ...))))
+            // in order to be able to do things like VALUES-clause inserts we need to preserve the original knowledge that the property was `Property(Id(p),"name").
+
+            // TODO 1) Encoder where VALUES-clause insertion is allowed on the IDIOM TYPE
+            //      2) Get the IDIOM TYPE here and check it's capabilities
+            //      3) If the IDIOM TYPE says it's capable of VALUES-clause UPDATE then DONT beta-reduce the update.filter (condition)
+            //         (instead,
             val (valuePluggingAst, _) = reifyLiftings(BetaReduction(body, alias -> nestedLift))
             // this is the ast with ScalarTag placeholders for the lifts
             val (ast, valuePlugList) = ExtractLiftings.of(valuePluggingAst)

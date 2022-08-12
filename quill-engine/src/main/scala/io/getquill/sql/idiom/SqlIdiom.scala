@@ -649,6 +649,11 @@ trait SqlIdiom extends Idiom {
 
   private def insertInfo(insertEntityTokenizer: Tokenizer[Entity], entity: Entity, assignments: List[Assignment])(implicit astTokenizer: Tokenizer[Ast], strategy: NamingStrategy) = {
     val table = insertEntityTokenizer.token(entity)
+    val (columns, values) = columnsAndValues(assignments)
+    (table, columns, values)
+  }
+
+  private[getquill] def columnsAndValues(assignments: List[Assignment])(implicit astTokenizer: Tokenizer[Ast], strategy: NamingStrategy) = {
     val columns =
       assignments.map(assignment =>
         assignment.property match {
@@ -656,7 +661,7 @@ trait SqlIdiom extends Idiom {
           case _ => fail(s"Invalid assignment value of ${assignment}. Must be a Property object.")
         })
     val values = assignments.map(assignment => scopedTokenizer(assignment.value))
-    (table, columns, values)
+    (columns, values)
   }
 
   implicit def entityTokenizer(implicit astTokenizer: Tokenizer[Ast], strategy: NamingStrategy): Tokenizer[Entity] = Tokenizer[Entity] {
