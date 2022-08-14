@@ -140,7 +140,7 @@ case class ReplaceLiftings(foreachIdentName: String, existingColumnNames: List[S
     e match {
       case lift: ScalarTag =>
         val id = Ident(foreachIdentName, lift.quat)
-        val propName = freshIdent("x")
+        val propName = freshIdent(lift.originalName.getOrElse("x"))
 
         (Property(id, propName), ReplaceLiftings(foreachIdentName, existingColumnNames, (propName -> lift) +: state))
       case _ => super.apply(e)

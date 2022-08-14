@@ -49,7 +49,7 @@ trait ReifyLiftings extends QuatMaking with TranspileConfigSummoning {
 
         case Property(nested, name) =>
           val Unparsed(nestedTree, nestedName) = unparse(nested)
-          Unparsed(q"${nestedTree}.${TermName(name)}", nestedName)
+          Unparsed(q"${nestedTree}.${TermName(name)}", s"$nestedName.$name")
 
         case OptionTableMap(ast2, Ident(alias, _), body) =>
           val Unparsed(ast2Tree, ast2Name) = unparse(ast2)
@@ -135,9 +135,9 @@ trait ReifyLiftings extends QuatMaking with TranspileConfigSummoning {
                   q"$ref.$liftings.${encode(lift.name)}"
                 lift match {
                   case ScalarValueLift(name, simpleName, value, encoder, quat) =>
-                    ScalarValueLift(s"$ref.$name", s"$ref.$simpleName", q"$nested.value", q"$nested.encoder", quat)
+                    ScalarValueLift(s"$ref.$name", simpleName, q"$nested.value", q"$nested.encoder", quat)
                   case CaseClassValueLift(name, simpleName, value, quat) =>
-                    CaseClassValueLift(s"$ref.$name", s"$ref.$simpleName", q"$nested.value", quat)
+                    CaseClassValueLift(s"$ref.$name", simpleName, q"$nested.value", quat)
                   case ScalarQueryLift(name, value, encoder, quat) =>
                     ScalarQueryLift(s"$ref.$name", q"$nested.value", q"$nested.encoder", quat)
                   case CaseClassQueryLift(name, value, quat) =>
