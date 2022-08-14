@@ -32,6 +32,8 @@ trait ReifyLiftings extends QuatMaking with TranspileConfigSummoning {
   private case class ReifyLiftings(state: Map[TermName, Reified])
     extends StatefulTransformer[Map[TermName, Reified]] {
 
+    case class Unparsed(tree: Tree, name: String)
+
     private def reify(lift: Lift) =
       lift match {
         case ScalarValueLift(name, value: Tree, encoder: Tree, _) => Reified(value, Some(encoder))
@@ -40,19 +42,33 @@ trait ReifyLiftings extends QuatMaking with TranspileConfigSummoning {
         case CaseClassQueryLift(name, value: Tree, _)             => Reified(value, None)
       }
 
-    private def unparse(ast: Ast): Tree =
+    private def unparse(ast: Ast): Unparsed =
       ast match {
-        case Property(Ident(alias, _), name) => q"${TermName(alias)}.${TermName(name)}"
-        case Property(nested, name)          => q"${unparse(nested)}.${TermName(name)}"
+        case Property(Ident(alias, _), name) =>
+          Unparsed(q"${TermName(alias)}.${TermName(name)}", name)
+
+        case Property(nested, name) =>
+          val Unparsed(nestedTree, nestedName) = unparse(nested)
+          Unparsed(q"${nestedTree}.${TermName(name)}", nestedName)
+
         case OptionTableMap(ast2, Ident(alias, _), body) =>
-          q"${unparse(ast2)}.map((${TermName(alias)}: ${tq""}) => ${unparse(body)})"
+          val Unparsed(ast2Tree, ast2Name) = unparse(ast2)
+          val Unparsed(bodyTree, bodyName) = unparse(body)
+          Unparsed(q"${ast2Tree}.map((${TermName(alias)}: ${tq""}) => ${bodyTree})", s"$ast2Name.$bodyName")
+
         case OptionMap(ast2, Ident(alias, _), body) =>
-          q"${unparse(ast2)}.map((${TermName(alias)}: ${tq""}) => ${unparse(body)})"
-        case CaseClassValueLift(_, v: Tree, _) => v
-        case other                             => c.fail(s"Unsupported AST: $other")
+          val Unparsed(ast2Tree, ast2Name) = unparse(ast2)
+          val Unparsed(bodyTree, bodyName) = unparse(body)
+          Unparsed(q"${ast2Tree}.map((${TermName(alias)}: ${tq""}) => ${bodyTree})", s"$ast2Name.$bodyName")
+
+        case CaseClassValueLift(_, v: Tree, _) =>
+          Unparsed(v, "") // TODO introduce SimpleName and take the value from that
+
+        case other => c.fail(s"Unsupported AST: $other")
       }
 
-    private def lift(v: Tree): Lift = {
+    private def lift(value: Unparsed): Lift = {
+      val Unparsed(v, tree) = value
       val tpe = c.typecheck(q"import _root_.scala.language.reflectiveCalls; $v").tpe
       OptionalTypecheck(c)(q"implicitly[${c.prefix}.Encoder[$tpe]]") match {
         case Some(enc) => ScalarValueLift(v.toString, v, enc, inferQuat(tpe))

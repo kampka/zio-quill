@@ -8,9 +8,14 @@ trait Unliftables extends QuatUnliftable {
   val mctx: Context
   import mctx.universe.{ Ident => _, Constant => _, Function => _, If => _, _ }
 
+  implicit val stringOptionUnliftable: Unliftable[Option[String]] = Unliftable[Option[String]] {
+    case q"scala.None"                             => None
+    case q"scala.Some[String](${ value: String })" => Some(value)
+  }
+
   implicit val astUnliftable: Unliftable[Ast] = Unliftable[Ast] {
     case liftUnliftable(ast) => ast
-    case q"ScalarTag(${ uid: String })" => ScalarTag(uid)
+    case q"ScalarTag(${ uid: String }, ${ originalName: Option[String] })" => ScalarTag(uid, originalName)
     case queryUnliftable(ast) => ast
     case actionUnliftable(ast) => ast
     case valueUnliftable(ast) => ast
@@ -212,7 +217,7 @@ trait Unliftables extends QuatUnliftable {
     case q"$pack.CaseClassQueryLift.apply(${ a: String }, $b, ${ quat: Quat })"  => CaseClassQueryLift(a, b, quat)
   }
   implicit val tagUnliftable: Unliftable[Tag] = Unliftable[Tag] {
-    case q"$pack.ScalarTag.apply(${ uid: String })"    => ScalarTag(uid)
-    case q"$pack.QuotationTag.apply(${ uid: String })" => QuotationTag(uid)
+    case q"$pack.ScalarTag.apply(${ uid: String }, ${ originalName: Option[String] })" => ScalarTag(uid, originalName)
+    case q"$pack.QuotationTag.apply(${ uid: String })"                                 => QuotationTag(uid)
   }
 }

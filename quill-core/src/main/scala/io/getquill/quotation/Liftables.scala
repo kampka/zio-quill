@@ -11,6 +11,11 @@ trait Liftables extends QuatLiftable {
 
   private val pack = q"io.getquill.ast"
 
+  implicit val stringOptionLiftable: Liftable[Option[String]] = Liftable[Option[String]] {
+    case None        => q"scala.None"
+    case Some(value) => q"scala.Some[String]($value)"
+  }
+
   implicit val astLiftable: Liftable[Ast] = Liftable[Ast] {
     case ast: Query => queryLiftable(ast)
     case ast: Action => actionLiftable(ast)
@@ -19,7 +24,7 @@ trait Liftables extends QuatLiftable {
     case ast: ExternalIdent => externalIdentLiftable(ast)
     case ast: Ordering => orderingLiftable(ast)
     case ast: Lift => liftLiftable(ast)
-    case ScalarTag(uid) => q"$pack.ScalarTag($uid)"
+    case ScalarTag(uid, originalName) => q"$pack.ScalarTag($uid, $originalName)"
     case ast: Assignment => assignmentLiftable(ast)
     case ast: AssignmentDual => assignmentDualLiftable(ast)
     case ast: OptionOperation => optionOperationLiftable(ast)
@@ -213,7 +218,7 @@ trait Liftables extends QuatLiftable {
     case CaseClassQueryLift(a, b: Tree, quat: Quat)       => q"$pack.CaseClassQueryLift($a, $b, $quat)"
   }
   implicit val tagLiftable: Liftable[Tag] = Liftable[Tag] {
-    case ScalarTag(uid)    => q"$pack.ScalarTag($uid)"
-    case QuotationTag(uid) => q"$pack.QuotationTag($uid)"
+    case ScalarTag(uid, originalName) => q"$pack.ScalarTag($uid, $originalName)"
+    case QuotationTag(uid)            => q"$pack.QuotationTag($uid)"
   }
 }

@@ -235,6 +235,7 @@ class ActionMacro(val c: MacroContext)
             //      3) If the IDIOM TYPE says it's capable of VALUES-clause UPDATE then DONT beta-reduce the update.filter (condition)
             //         (instead,
             val (valuePluggingAst, _) = reifyLiftings(BetaReduction(body, alias -> nestedLift))
+            println(io.getquill.util.Messages.qprint(valuePluggingAst))
             // this is the ast with ScalarTag placeholders for the lifts
             val (ast, valuePlugList) = ExtractLiftings.of(valuePluggingAst)
             val liftUnlift = new { override val mctx: c.type = c } with TokenLift(ast.countQuatFields)
@@ -291,7 +292,11 @@ class ActionMacro(val c: MacroContext)
       e match {
         case lift: ScalarLift =>
           val uuid = UUID.randomUUID().toString
-          (ScalarTag(uuid), ExtractLiftings((uuid -> lift) +: state))
+          // In reifyLiftings (say p:Person from a value-lift) Property(CaseClassLift(p), "name") becomes ScalarLift("value.name", p.name)
+          // further nestings are possible e.g. Property(Property(CaseClassLift(p), "name"), "first") which becomes ScalarLift("value.name.first", p.name.first)
+          // so we just want to remove the "value." part. Could try to change the naming and reifyLiftings but I don't want to touch that.
+          val scalarTagName = lift.name.stripPrefix("value.")
+          (ScalarTag(uuid, Some(scalarTagName)), ExtractLiftings((uuid -> lift) +: state))
         case _ => super.apply(e)
       }
   }

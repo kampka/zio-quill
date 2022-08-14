@@ -832,7 +832,7 @@ sealed trait Tag extends External {
 }
 
 case class ScalarTagId(uid: String)
-case class ScalarTag(uid: String) extends Tag {
+case class ScalarTag(uid: String, originalName: Option[String]) extends Tag {
   def quat = Quat.Value
   def bestQuat = quat
 
