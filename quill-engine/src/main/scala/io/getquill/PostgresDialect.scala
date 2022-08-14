@@ -76,14 +76,52 @@ object PostgresDialectExt {
     //    AS c(id, name, age)
     //    WHERE c.id = p.id
 
+    // NOTE going to need to test this with multi-level variables & renamed variables as well as variable conflicts with main body
+    def extractLiftsFromFilter(where: Ast): Ast = {
+      null
+    }
+
     // Uses the `alias` passed in as `actionAlias` since that is now assigned to the copied SqlIdiom
     action match {
       case Update(Filter(table: Entity, x, where), assignments) =>
-        val (columns, values) = columnsAndValues(assignments)
-        val columnSetters =
-          stmt"UPDATE ${table.token}${` AS [table]`} SET FROM (VALUES ${ValuesClauseToken(stmt"(${values.mkStmt(", ")})")}) ${assignments.token} ${where.token}"
+        // Original Query looks like:
+        //   liftQuery(people).foreach(ps => query[Person].filter(p => p.id == ps.id).update(_.name -> ps.name))
+        // This has already been transpiled to (foreach part has been removed):
+        //   query[Person].filter(p => p.id == STag(A)).update(_.name -> STag(B))
+        // SQL Needs to look like:
+        //   UPDATE person AS p SET name = ps.name FROM (VALUES ('Joe', 123)) AS ps(name, id) WHERE ps.id = p.id
+        // I.e.
+        //   UPDATE person AS p SET name = ps.name FROM (VALUES (STag(B), STag(A))) AS ps(name, id) WHERE ps.id = p.id
+        // Conceptually, that means the query needs to look like:
+        //   query[Person].filter(p => p.id == ps.id).update(_.name -> ps.id) with VALUES (STag(B), STag(A))
+        // We don't actually change it to this, we yield the SQL directly but it is a good conceptual model
 
-        null
+        // Let's consider this odd case for all examples. There could have the same id-column name in multiple places.
+        // (NOTE: STag := ScalarTag, the UUIDs are random so I am just assigning numbers to them for reference. Also when the query is tokenize then turn into `?`)
+        // (Also [stuff] is short for List(stuff) syntax)
+        // Need to work around how that happens
+        //   liftQuery(people).foreach(ps => query[Person].filter(p => p.id == ps.id).update(_.name -> ps.name, _.id -> ps.id)
+        // This has already been transpiled to (foreach part has been removed):
+        //   query[Person].filter(p => p.id == STag(uid:3)).update(_.name -> STag(uid:1), _.id -> STag(uid:2))
+        // For now, blindly shove the name into the aliases section and dedupe
+        //   UPDATE person AS p SET name = ps.name, id = ps.id FROM (VALUES ('Joe', 123, 123)) AS ps(name, id, id1) WHERE ps.id = p.id1
+        // This should actually be
+        //   UPDATE person AS p SET name = ps.name, id = ps.id FROM (VALUES (STag(uid:1), STag(uid:2), STag(uid:3))) AS ps(name, id, id1) WHERE ps.id = p.id1
+
+        // The SET columns/values i.e. ([name, id], [STag(uid:1), STag(uid:2)]
+        val (columns, values) = columnsAndValues(assignments)
+        // I.e. `ps`
+        val colsIdStr = transpileContext.batchAlias.getOrElse { throw new IllegalArgumentException("Batch alias not detected!") }
+        val colsId = colsIdStr.token
+        // All the lifts in the WHERE clause that we need to put into the actual VALUES clause instead
+        // Originally was `WHERE ps.id = STag(uid:3)`
+        // (replacedWhere: `WHERE ps.id = p.id1`, additionalColumns: [id] /*and any other column names of STags in WHERE*/, additionalLifts: [STag(uid:3)])
+        val (replacedWhere, additionalColumns, additionalLifts) = ReplaceLiftings.of(where)(colsIdStr, columns.map(_.toString))
+        // The columns that go in the SET clause i.e. `SET name = ps.name, id = ps.id`
+        val setColumns = columns.map(col => stmt"$col = $colsId.$col").mkStmt(", ")
+        // The columns that go inside ps(name, id, id1) i.e. stmt"name, id, id1"
+        val asColumns = (columns ++ additionalColumns.map(_.token)).mkStmt(", ")
+        stmt"UPDATE ${table.token}${` AS [table]`} SET $setColumns FROM (VALUES ${ValuesClauseToken(stmt"(${values.mkStmt(", ")})")}) AS ${colsId}($asColumns) WHERE ${replacedWhere.token}"
 
       case Update(table: Entity, assignments) =>
         stmt"UPDATE ${table.token}${` AS [table]`} SET ${assignments.token}"
@@ -91,5 +129,26 @@ object PostgresDialectExt {
       case _ =>
         fail("Invalid state. Only UPDATE/DELETE with filter allowed here.")
     }
+  }
+}
+
+// TODO Need to consider column conflicts & columns within columns in the original entity
+case class ReplaceLiftings(foreachIdentName: String, existingColumnNames: List[String], state: List[(String, ScalarTag)]) extends StatefulTransformer[List[(String, ScalarTag)]] {
+  // TODO Check all column names for confligs
+  def freshIdent(originalColumnName: String) = originalColumnName
+  override def apply(e: Ast): (Ast, StatefulTransformer[List[(String, ScalarTag)]]) =
+    e match {
+      case lift: ScalarTag =>
+        val id = Ident(foreachIdentName, lift.quat)
+        val propName = freshIdent("x")
+
+        (Property(id, propName), ReplaceLiftings(foreachIdentName, existingColumnNames, (propName -> lift) +: state))
+      case _ => super.apply(e)
+    }
+}
+object ReplaceLiftings {
+  def of(ast: Ast)(foreachIdent: String, existingColumnNames: List[String]) = {
+    val (newAst, transform) = new ReplaceLiftings(foreachIdent, existingColumnNames, List()).apply(ast)
+    (newAst, transform.state.map(_._1), transform.state.map(_._2))
   }
 }
