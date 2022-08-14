@@ -110,7 +110,7 @@ class ActionMacro(val c: MacroContext)
 
   def batchActionRows(quoted: Tree, method: String, numRows: Tree): Tree =
     expandBatchActionNew(quoted) {
-      case (batch, param, expanded, injectableLiftList, idiomNamingOriginalAstVars) =>
+      case (batch, param, expanded, injectableLiftList, idiomNamingOriginalAstVars, transpileContext) =>
         q"""
           ..${EnableReflectiveCalls(c)}
           ${c.prefix}.${TermName(method)}({
@@ -121,6 +121,7 @@ class ActionMacro(val c: MacroContext)
             */
             import io.getquill.util.OrderedGroupByExt._
             val originalAst = $idiomNamingOriginalAstVars
+            val transpileContext = $transpileContext
             /* for liftQuery(people:List[Person]) `batch` is `people` */
             /* TODO Need secondary check to see if context is actually capable of batch-values insert */
             /* If there is a INSERT ... VALUES clause this will be cnoded as ValuesClauseToken(lifts) which we need to duplicate */
@@ -165,12 +166,13 @@ class ActionMacro(val c: MacroContext)
 
   def batchActionReturningRows[T](quoted: Tree, numRows: Tree)(implicit t: WeakTypeTag[T]): Tree =
     expandBatchActionNew(quoted) {
-      case (batch, param, expanded, injectableLiftList, idiomNamingOriginalAstVars) =>
+      case (batch, param, expanded, injectableLiftList, idiomNamingOriginalAstVars, transpileContext) =>
         q"""
           ..${EnableReflectiveCalls(c)}
           ${c.prefix}.executeBatchActionReturning({
             import io.getquill.util.OrderedGroupByExt._
             val originalAst = $idiomNamingOriginalAstVars
+            val transpileContext = $transpileContext
             val batches =
               if (io.getquill.context.CanDoBatchedInsert(originalAst, $numRows, idiom, naming, true, transpileContext) && $numRows != 1) {
                 $batch.toList.grouped($numRows).toList
@@ -191,7 +193,7 @@ class ActionMacro(val c: MacroContext)
         """
     }
 
-  def expandBatchActionNew(quoted: Tree)(call: (Tree, Tree, Tree, Tree, Tree) => Tree): Tree =
+  def expandBatchActionNew(quoted: Tree)(call: (Tree, Tree, Tree, Tree, Tree, Tree) => Tree): Tree =
     BetaReduction(extractAst(quoted)) match {
       case Foreach(lift: Lift, alias, body) =>
         // for liftQuery(people:List[Person]) this is: `people`
@@ -248,19 +250,21 @@ class ActionMacro(val c: MacroContext)
             // Splice into the code to tokenize the ast (i.e. the Expand class) and compile-time translate the AST if possible
             val expanded =
               q"""
-              val transpileContext = ${ConfigLiftables.transpileContextLiftable(transpileContext)}
               val (ast, statement, executionType) = ${translate(ast, Quat.Unknown, transpileContext)}
               io.getquill.context.ExpandWithInjectables(${c.prefix}, ast, statement, idiom, naming, executionType, subBatch, $injectableLiftList)
               """
 
             val idiomNamingOriginalAstVars =
               q"""
-              val (idiom, naming) = ${idiomAndNamingDynamic}
+              val (idiom, naming) = ${idiomAndNamingDynamic};
               ${liftUnlift.astLiftable.apply((ast))}
               """
 
+            val transpileContextExpr =
+              ConfigLiftables.transpileContextLiftable(transpileContext)
+
             c.untypecheck {
-              call(batch, param, expanded, injectableLiftList, idiomNamingOriginalAstVars)
+              call(batch, param, expanded, injectableLiftList, idiomNamingOriginalAstVars, transpileContextExpr)
             }
         }
       case other =>
