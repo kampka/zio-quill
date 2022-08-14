@@ -36,10 +36,10 @@ trait ReifyLiftings extends QuatMaking with TranspileConfigSummoning {
 
     private def reify(lift: Lift) =
       lift match {
-        case ScalarValueLift(name, value: Tree, encoder: Tree, _) => Reified(value, Some(encoder))
-        case CaseClassValueLift(name, value: Tree, _)             => Reified(value, None)
-        case ScalarQueryLift(name, value: Tree, encoder: Tree, _) => Reified(value, Some(encoder))
-        case CaseClassQueryLift(name, value: Tree, _)             => Reified(value, None)
+        case ScalarValueLift(name, simpleName, value: Tree, encoder: Tree, _) => Reified(value, Some(encoder))
+        case CaseClassValueLift(name, simpleName, value: Tree, _)             => Reified(value, None)
+        case ScalarQueryLift(name, value: Tree, encoder: Tree, _)             => Reified(value, Some(encoder))
+        case CaseClassQueryLift(name, value: Tree, _)                         => Reified(value, None)
       }
 
     private def unparse(ast: Ast): Unparsed =
@@ -61,21 +61,21 @@ trait ReifyLiftings extends QuatMaking with TranspileConfigSummoning {
           val Unparsed(bodyTree, bodyName) = unparse(body)
           Unparsed(q"${ast2Tree}.map((${TermName(alias)}: ${tq""}) => ${bodyTree})", s"$ast2Name.$bodyName")
 
-        case CaseClassValueLift(_, v: Tree, _) =>
-          Unparsed(v, "") // TODO introduce SimpleName and take the value from that
+        case CaseClassValueLift(_, simpleName, v: Tree, _) =>
+          Unparsed(v, simpleName)
 
         case other => c.fail(s"Unsupported AST: $other")
       }
 
     private def lift(value: Unparsed): Lift = {
-      val Unparsed(v, tree) = value
+      val Unparsed(v, originalName) = value
       val tpe = c.typecheck(q"import _root_.scala.language.reflectiveCalls; $v").tpe
       OptionalTypecheck(c)(q"implicitly[${c.prefix}.Encoder[$tpe]]") match {
-        case Some(enc) => ScalarValueLift(v.toString, v, enc, inferQuat(tpe))
+        case Some(enc) => ScalarValueLift(v.toString, originalName, v, enc, inferQuat(tpe))
         case None =>
           tpe.baseType(c.symbolOf[Product]) match {
             case NoType => c.fail(s"Can't find an encoder for the lifted case class property '$v'")
-            case _      => CaseClassValueLift(v.toString, v, inferQuat(tpe))
+            case _      => CaseClassValueLift(v.toString, originalName, v, inferQuat(tpe))
           }
       }
     }
@@ -134,10 +134,10 @@ trait ReifyLiftings extends QuatMaking with TranspileConfigSummoning {
                 val nested =
                   q"$ref.$liftings.${encode(lift.name)}"
                 lift match {
-                  case ScalarValueLift(name, value, encoder, quat) =>
-                    ScalarValueLift(s"$ref.$name", q"$nested.value", q"$nested.encoder", quat)
-                  case CaseClassValueLift(name, value, quat) =>
-                    CaseClassValueLift(s"$ref.$name", q"$nested.value", quat)
+                  case ScalarValueLift(name, simpleName, value, encoder, quat) =>
+                    ScalarValueLift(s"$ref.$name", s"$ref.$simpleName", q"$nested.value", q"$nested.encoder", quat)
+                  case CaseClassValueLift(name, simpleName, value, quat) =>
+                    CaseClassValueLift(s"$ref.$name", s"$ref.$simpleName", q"$nested.value", quat)
                   case ScalarQueryLift(name, value, encoder, quat) =>
                     ScalarQueryLift(s"$ref.$name", q"$nested.value", q"$nested.encoder", quat)
                   case CaseClassQueryLift(name, value, quat) =>

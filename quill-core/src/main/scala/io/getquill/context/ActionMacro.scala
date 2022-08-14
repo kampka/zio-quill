@@ -208,9 +208,9 @@ class ActionMacro(val c: MacroContext)
             val nestedLift =
               lift match {
                 case ScalarQueryLift(name, batch: Tree, encoder: Tree, quat) =>
-                  ScalarValueLift("value", q"$values", encoder, quat)
+                  ScalarValueLift("value", "", q"$values", encoder, quat)
                 case CaseClassQueryLift(name, batch: Tree, quat) =>
-                  CaseClassValueLift("value", q"$values", quat)
+                  CaseClassValueLift("value", "", q"$values", quat)
               }
 
             // So then on the AST-level we transform the alias `p` **
@@ -323,9 +323,9 @@ class ActionMacro(val c: MacroContext)
             val nestedLift =
               lift match {
                 case ScalarQueryLift(name, batch: Tree, encoder: Tree, quat) =>
-                  ScalarValueLift("value", value, encoder, quat)
+                  ScalarValueLift("value", "value", value, encoder, quat)
                 case CaseClassQueryLift(name, batch: Tree, quat) =>
-                  CaseClassValueLift("value", value, quat)
+                  CaseClassValueLift("value", "value", value, quat)
               }
             val (ast, _) = reifyLiftings(BetaReduction(body, alias -> nestedLift))
             c.untypecheck {

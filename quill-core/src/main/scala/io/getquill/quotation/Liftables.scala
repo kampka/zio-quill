@@ -212,10 +212,10 @@ trait Liftables extends QuatLiftable {
   }
 
   implicit val liftLiftable: Liftable[Lift] = Liftable[Lift] {
-    case ScalarValueLift(a, b: Tree, c: Tree, quat: Quat) => q"$pack.ScalarValueLift($a, $b, $c, $quat)"
-    case CaseClassValueLift(a, b: Tree, quat: Quat)       => q"$pack.CaseClassValueLift($a, $b, $quat)"
-    case ScalarQueryLift(a, b: Tree, c: Tree, quat: Quat) => q"$pack.ScalarQueryLift($a, $b, $c, $quat)"
-    case CaseClassQueryLift(a, b: Tree, quat: Quat)       => q"$pack.CaseClassQueryLift($a, $b, $quat)"
+    case ScalarValueLift(a, a1, b: Tree, c: Tree, quat: Quat) => q"$pack.ScalarValueLift($a, $a1, $b, $c, $quat)"
+    case CaseClassValueLift(a, a1, b: Tree, quat: Quat)       => q"$pack.CaseClassValueLift($a, $a1, $b, $quat)"
+    case ScalarQueryLift(a, b: Tree, c: Tree, quat: Quat)     => q"$pack.ScalarQueryLift($a, $b, $c, $quat)"
+    case CaseClassQueryLift(a, b: Tree, quat: Quat)           => q"$pack.CaseClassQueryLift($a, $b, $quat)"
   }
   implicit val tagLiftable: Liftable[Tag] = Liftable[Tag] {
     case ScalarTag(uid, originalName) => q"$pack.ScalarTag($uid, $originalName)"

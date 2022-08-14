@@ -111,7 +111,7 @@ class AstPrinter(traceOpinions: Boolean, traceAstSimple: Boolean, traceQuats: Qu
 
       case q: Quat            => Tree.Literal(q.shortString)
 
-      case s: ScalarValueLift => Tree.Apply("ScalarValueLift", treemake(s.name).withQuat(s.bestQuat).make)
+      case s: ScalarValueLift => Tree.Apply("ScalarValueLift", treemake(s.name, s.simpleName).withQuat(s.bestQuat).make)
 
       case p: Property if (traceOpinions) =>
         TreeApplyList("Property", l(treeify(p.ast)) ++ l(treeify(p.name)) ++
