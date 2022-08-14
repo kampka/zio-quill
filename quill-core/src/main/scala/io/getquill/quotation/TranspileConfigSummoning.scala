@@ -1,5 +1,6 @@
 package io.getquill.quotation
 
+import io.getquill.TranspileContext
 import io.getquill.norm.{ OptionalPhase, TranspileConfig }
 import io.getquill.util.Messages.TraceType
 import io.getquill.util.TraceConfig
@@ -108,6 +109,10 @@ trait TranspileConfigSummoning {
 
     implicit val transpileConfigLiftable: Liftable[TranspileConfig] = Liftable[TranspileConfig] {
       case TranspileConfig(disablePhases, traceConfig) => q"io.getquill.norm.TranspileConfig(${disablePhases}, ${traceConfig})"
+    }
+
+    implicit val transpileContextLiftable: Liftable[TranspileContext] = Liftable[TranspileContext] {
+      case TranspileContext(transpileConfig, batchAlias) => q"io.getquill.TranspileContext(${transpileConfig}, ${batchAlias})"
     }
   }
 }

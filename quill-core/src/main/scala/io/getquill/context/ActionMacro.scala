@@ -1,5 +1,6 @@
 package io.getquill.context
 
+import io.getquill.TranspileContext
 import io.getquill.ast._
 import io.getquill.norm.BetaReduction
 import io.getquill.quat.Quat
@@ -125,7 +126,7 @@ class ActionMacro(val c: MacroContext)
             /* If there is a INSERT ... VALUES clause this will be cnoded as ValuesClauseToken(lifts) which we need to duplicate */
             /* batches: List[List[Person]] */
             val batches =
-              if (io.getquill.context.CanDoBatchedInsert(originalAst, $numRows, idiom, naming, false, ${ConfigLiftables.transpileConfigLiftable(transpileConfig)}) && $numRows != 1) {
+              if (io.getquill.context.CanDoBatchedInsert(originalAst, $numRows, idiom, naming, false, transpileContext) && $numRows != 1) {
                 $batch.toList.grouped($numRows).toList
               } else {
                 $batch.toList.map(element => List(element))
@@ -171,7 +172,7 @@ class ActionMacro(val c: MacroContext)
             import io.getquill.util.OrderedGroupByExt._
             val originalAst = $idiomNamingOriginalAstVars
             val batches =
-              if (io.getquill.context.CanDoBatchedInsert(originalAst, $numRows, idiom, naming, true, ${ConfigLiftables.transpileConfigLiftable(transpileConfig)}) && $numRows != 1) {
+              if (io.getquill.context.CanDoBatchedInsert(originalAst, $numRows, idiom, naming, true, transpileContext) && $numRows != 1) {
                 $batch.toList.grouped($numRows).toList
               } else {
                 $batch.toList.map(element => List(element))
@@ -242,11 +243,13 @@ class ActionMacro(val c: MacroContext)
                   q"($id, ($param) => ${liftUnlift.astLiftable(valuePlugLift)})"
               }
             val injectableLiftList = q"$injectableLiftListTrees"
+            val transpileContext = TranspileContext(transpileConfig, Some(alias.name))
 
             // Splice into the code to tokenize the ast (i.e. the Expand class) and compile-time translate the AST if possible
             val expanded =
               q"""
-              val (ast, statement, executionType) = ${translate(ast, Quat.Unknown, transpileConfig)}
+              val transpileContext = ${ConfigLiftables.transpileContextLiftable(transpileContext)}
+              val (ast, statement, executionType) = ${translate(ast, Quat.Unknown, transpileContext)}
               io.getquill.context.ExpandWithInjectables(${c.prefix}, ast, statement, idiom, naming, executionType, subBatch, $injectableLiftList)
               """
 
