@@ -22,16 +22,20 @@ class ActionMacro(val c: MacroContext)
     translateQueryPrettyPrint(quoted, q"false")
 
   def translateQueryPrettyPrint(quoted: Tree, prettyPrint: Tree): Tree =
-    c.untypecheck {
-      q"""
-        ..${EnableReflectiveCalls(c)}
-        val expanded = ${expand(extractAst(quoted), inferQuat(quoted.tpe))}
-        ${c.prefix}.translateQuery(
-          expanded.string,
-          expanded.prepare,
-          prettyPrint = ${prettyPrint}
-        )(io.getquill.context.ExecutionInfo.unknown, ())
-      """
+    expand(extractAst(quoted), inferQuat(quoted.tpe)) match {
+      case (idiomContext, expanded) =>
+        c.untypecheck {
+          q"""
+            ..${EnableReflectiveCalls(c)}
+            val idiomContext = $idiomContext
+            val expanded = $expanded
+            ${c.prefix}.translateQuery(
+              expanded.string,
+              expanded.prepare,
+              prettyPrint = ${prettyPrint}
+            )(io.getquill.context.ExecutionInfo.unknown, ())
+          """
+        }
     }
 
   def translateBatchQuery(quoted: Tree): Tree =
@@ -39,11 +43,12 @@ class ActionMacro(val c: MacroContext)
 
   def translateBatchQueryPrettyPrint(quoted: Tree, prettyPrint: Tree): Tree =
     expandBatchAction(quoted) {
-      case (batch, param, expanded) =>
+      case (batch, param, idiomContext, expanded) =>
         q"""
           ..${EnableReflectiveCalls(c)}
           ${c.prefix}.translateBatchQuery(
             $batch.map { $param =>
+              val idiomContext = $idiomContext
               val expanded = $expanded
               (expanded.string, expanded.prepare)
             }.groupBy(_._1).map {
@@ -56,43 +61,55 @@ class ActionMacro(val c: MacroContext)
     }
 
   def runAction(quoted: Tree): Tree =
-    c.untypecheck {
-      q"""
-        ..${EnableReflectiveCalls(c)}
-        val expanded = ${expand(extractAst(quoted), Quat.Value)}
-        ${c.prefix}.executeAction(
-          expanded.string,
-          expanded.prepare
-        )(io.getquill.context.ExecutionInfo.unknown, ())
-      """
+    expand(extractAst(quoted), Quat.Value) match {
+      case (idiomContext, expanded) =>
+        c.untypecheck {
+          q"""
+            ..${EnableReflectiveCalls(c)}
+            val idiomContext = $idiomContext
+            val expanded = $expanded
+            ${c.prefix}.executeAction(
+              expanded.string,
+              expanded.prepare
+            )(io.getquill.context.ExecutionInfo.unknown, ())
+          """
+        }
     }
 
   def runActionReturning[T](quoted: Tree)(implicit t: WeakTypeTag[T]): Tree =
-    c.untypecheck {
-      q"""
-        ..${EnableReflectiveCalls(c)}
-        val expanded = ${expand(extractAst(quoted), inferQuat(t.tpe))}
-        ${c.prefix}.executeActionReturning(
-          expanded.string,
-          expanded.prepare,
-          ${returningExtractor[T]},
-          $returningColumn
-        )(io.getquill.context.ExecutionInfo.unknown, ())
-      """
+    expand(extractAst(quoted), inferQuat(t.tpe)) match {
+      case (idiomContext, expanded) =>
+        c.untypecheck {
+          q"""
+            ..${EnableReflectiveCalls(c)}
+            val idiomContext = $idiomContext
+            val expanded = $expanded
+            ${c.prefix}.executeActionReturning(
+              expanded.string,
+              expanded.prepare,
+              ${returningExtractor[T]},
+              $returningColumn
+            )(io.getquill.context.ExecutionInfo.unknown, ())
+          """
+        }
     }
 
   def runActionReturningMany[T](quoted: Tree)(implicit t: WeakTypeTag[T]): Tree =
-    c.untypecheck { // TODO return expanded.executionType since we now have this info
-      q"""
-        ..${EnableReflectiveCalls(c)}
-        val expanded = ${expand(extractAst(quoted), inferQuat(t.tpe))}
-        ${c.prefix}.executeActionReturningMany(
-          expanded.string,
-          expanded.prepare,
-          ${returningExtractor[T]},
-          $returningColumn
-        )(io.getquill.context.ExecutionInfo.unknown, ())
-      """
+    expand(extractAst(quoted), inferQuat(t.tpe)) match {
+      case (idiomContext, expanded) =>
+        c.untypecheck {
+          q"""
+            ..${EnableReflectiveCalls(c)}
+            val idiomContext = $idiomContext
+            val expanded = $expanded
+            ${c.prefix}.executeActionReturningMany(
+              expanded.string,
+              expanded.prepare,
+              ${returningExtractor[T]},
+              $returningColumn
+            )(io.getquill.context.ExecutionInfo.unknown, ())
+          """
+        }
     }
 
   // Called from: run(BatchAction)
@@ -229,13 +246,7 @@ class ActionMacro(val c: MacroContext)
             // ReifyLiftings will then turn it
             // into this: `foreach(people).map(p => filter(pp => pp.id == CCV((value:Person).id,...).update(CCV((value:Person).name), CCV(... (value:Person).age ...))))
             // in order to be able to do things like VALUES-clause inserts we need to preserve the original knowledge that the property was `Property(Id(p),"name").
-
-            // TODO 1) Encoder where VALUES-clause insertion is allowed on the IDIOM TYPE
-            //      2) Get the IDIOM TYPE here and check it's capabilities
-            //      3) If the IDIOM TYPE says it's capable of VALUES-clause UPDATE then DONT beta-reduce the update.filter (condition)
-            //         (instead,
             val (valuePluggingAst, _) = reifyLiftings(BetaReduction(body, alias -> nestedLift))
-            println(io.getquill.util.Messages.qprint(valuePluggingAst))
             // this is the ast with ScalarTag placeholders for the lifts
             val (ast, valuePlugList) = ExtractLiftings.of(valuePluggingAst)
             val liftUnlift = new { override val mctx: c.type = c } with TokenLift(ast.countQuatFields)
@@ -313,13 +324,13 @@ class ActionMacro(val c: MacroContext)
         case ret: io.getquill.ast.ReturningAction =>
             io.getquill.norm.ExpandReturning.applyMap(ret)(
               (ast, statement) => io.getquill.context.Expand(${c.prefix}, ast, statement, idiom, naming, io.getquill.context.ExecutionType.Unknown).string
-            )(idiom, naming, ${ConfigLiftables.transpileConfigLiftable(transpileConfig)})
+            )(idiom, naming, idiomContext)
         case ast =>
           io.getquill.util.Messages.fail(s"Can't find returning column. Ast: '$$ast'")
       })
     """
 
-  def expandBatchAction(quoted: Tree)(call: (Tree, Tree, Tree) => Tree): Tree =
+  def expandBatchAction(quoted: Tree)(call: (Tree, Tree, Tree, Tree) => Tree): Tree =
     BetaReduction(extractAst(quoted)) match {
       case ast @ Foreach(lift: Lift, alias, body) =>
         val batch = lift.value.asInstanceOf[Tree]
@@ -334,8 +345,9 @@ class ActionMacro(val c: MacroContext)
                   CaseClassValueLift("value", "value", value, quat)
               }
             val (ast, _) = reifyLiftings(BetaReduction(body, alias -> nestedLift))
+            val (idiomContext, expanded) = expand(ast, Quat.Unknown)
             c.untypecheck {
-              call(batch, param, expand(ast, Quat.Unknown))
+              call(batch, param, idiomContext, expanded)
             }
         }
       case other =>
@@ -346,7 +358,7 @@ class ActionMacro(val c: MacroContext)
     c.untypecheck {
       q"""
         ..${EnableReflectiveCalls(c)}
-        val expanded = ${expand(extractAst(quoted), Quat.Value)}
+        val (idiomContext, expanded) = ${expand(extractAst(quoted), Quat.Value)}
         ${c.prefix}.prepareAction(
           expanded.string,
           expanded.prepare

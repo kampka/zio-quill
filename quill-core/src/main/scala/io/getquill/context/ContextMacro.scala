@@ -16,13 +16,17 @@ trait ContextMacro extends Quotation {
   val c: MacroContext
   import c.universe.{ Function => _, Ident => _, _ }
 
-  protected def expand(ast: Ast, topLevelQuat: Quat): Tree = {
+  protected def expand(ast: Ast, topLevelQuat: Quat): (Tree, Tree) = {
+    val idiomContextVar = IdiomContext(transpileConfig, IdiomContext.QueryType.Regular)
     summonPhaseDisable()
-    q"""
-      val (idiom, naming) = ${idiomAndNamingDynamic}
-      val (ast, statement, executionType) = ${translate(ast, topLevelQuat, IdiomContext(transpileConfig, IdiomContext.QueryType.Regular))}
-      io.getquill.context.Expand(${c.prefix}, ast, statement, idiom, naming, executionType)
-    """
+    (
+      ConfigLiftables.transpileContextLiftable(idiomContextVar),
+      q"""
+        val (idiom, naming) = ${idiomAndNamingDynamic}
+        val (ast, statement, executionType) = ${translate(ast, topLevelQuat, idiomContextVar)}
+        io.getquill.context.Expand(${c.prefix}, ast, statement, idiom, naming, executionType)
+      """
+    )
   }
 
   protected def extractAst[T](quoted: Tree): Ast =
