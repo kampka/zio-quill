@@ -208,9 +208,9 @@ class ActionMacro(val c: MacroContext)
             val nestedLift =
               lift match {
                 case ScalarQueryLift(name, batch: Tree, encoder: Tree, quat) =>
-                  ScalarValueLift("value", "", q"$values", encoder, quat)
+                  ScalarValueLift("value", "value", q"$values", encoder, quat)
                 case CaseClassQueryLift(name, batch: Tree, quat) =>
-                  CaseClassValueLift("value", "", q"$values", quat)
+                  CaseClassValueLift("value", "value", q"$values", quat)
               }
 
             // So then on the AST-level we transform the alias `p` **
@@ -299,9 +299,9 @@ class ActionMacro(val c: MacroContext)
             }
           val uuid = UUID.randomUUID().toString
           // In reifyLiftings (say p:Person from a value-lift) Property(CaseClassLift(p), "name") becomes ScalarLift(".name", p.name)
-          // further nestings are possible e.g. Property(Property(CaseClassLift(p), "name"), "first") which becomes ScalarLift(".name.first", p.name.first)
+          // further nestings are possible e.g. Property(Property(CaseClassLift(p), "name"), "first") which becomes ScalarLift("value.name.first", p.name.first)
           // so we just want to remove the "." part.
-          val scalarTagName = columnName.stripPrefix(".")
+          val scalarTagName = columnName.stripPrefix("value.")
           (ScalarTag(uuid, Some(scalarTagName)), ExtractLiftings((uuid -> lift) +: state))
         case _ => super.apply(e)
       }
@@ -329,9 +329,9 @@ class ActionMacro(val c: MacroContext)
             val nestedLift =
               lift match {
                 case ScalarQueryLift(name, batch: Tree, encoder: Tree, quat) =>
-                  ScalarValueLift("value", "", value, encoder, quat)
+                  ScalarValueLift("value", "value", value, encoder, quat)
                 case CaseClassQueryLift(name, batch: Tree, quat) =>
-                  CaseClassValueLift("value", "", value, quat)
+                  CaseClassValueLift("value", "value", value, quat)
               }
             val (ast, _) = reifyLiftings(BetaReduction(body, alias -> nestedLift))
             c.untypecheck {

@@ -11,6 +11,9 @@ import io.getquill.idiom.StatementInterpolator._
 import io.getquill.norm.ProductAggregationToken
 import io.getquill.util.Messages.fail
 
+import scala.annotation.tailrec
+import scala.collection.immutable.{ ListMap, ListSet }
+
 trait PostgresDialect
   extends SqlIdiom
   with QuestionMarkBindVariables
@@ -133,22 +136,43 @@ object PostgresDialectExt {
 }
 
 // TODO Need to consider column conflicts & columns within columns in the original entity
-case class ReplaceLiftings(foreachIdentName: String, existingColumnNames: List[String], state: List[(String, ScalarTag)]) extends StatefulTransformer[List[(String, ScalarTag)]] {
+case class ReplaceLiftings(foreachIdentName: String, existingColumnNames: List[String], state: ListMap[String, ScalarTag]) extends StatefulTransformer[ListMap[String, ScalarTag]] {
+
+  private def columnExists(col: String) =
+    existingColumnNames.contains(col) || state.keySet.contains(col)
+
   // TODO Check all column names for confligs
-  def freshIdent(originalColumnName: String) = originalColumnName
-  override def apply(e: Ast): (Ast, StatefulTransformer[List[(String, ScalarTag)]]) =
+  def freshIdent(newCol: String) = {
+    @tailrec
+    def loop(id: String, n: Int): String = {
+      val fresh = s"${id}${n}"
+      if (!columnExists(fresh))
+        fresh
+      else
+        loop(id, n + 1)
+    }
+    if (!columnExists(newCol))
+      newCol
+    else
+      loop(newCol, 1)
+  }
+
+  private def parseName(name: String) =
+    name.replace(".", "_")
+
+  override def apply(e: Ast): (Ast, StatefulTransformer[ListMap[String, ScalarTag]]) =
     e match {
       case lift: ScalarTag =>
         val id = Ident(foreachIdentName, lift.quat)
-        val propName = freshIdent(lift.originalName.getOrElse("x"))
+        val propName = freshIdent(lift.originalName.map(parseName(_)).getOrElse("x"))
 
-        (Property(id, propName), ReplaceLiftings(foreachIdentName, existingColumnNames, (propName -> lift) +: state))
+        (Property(id, propName), ReplaceLiftings(foreachIdentName, existingColumnNames, state + (propName -> lift)))
       case _ => super.apply(e)
     }
 }
 object ReplaceLiftings {
   def of(ast: Ast)(foreachIdent: String, existingColumnNames: List[String]) = {
-    val (newAst, transform) = new ReplaceLiftings(foreachIdent, existingColumnNames, List()).apply(ast)
+    val (newAst, transform) = new ReplaceLiftings(foreachIdent, existingColumnNames, ListMap()).apply(ast)
     (newAst, transform.state.map(_._1), transform.state.map(_._2))
   }
 }
