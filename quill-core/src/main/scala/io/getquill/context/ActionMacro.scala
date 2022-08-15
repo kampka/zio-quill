@@ -1,6 +1,6 @@
 package io.getquill.context
 
-import io.getquill.TranspileContext
+import io.getquill.IdiomContext
 import io.getquill.ast._
 import io.getquill.norm.BetaReduction
 import io.getquill.quat.Quat
@@ -110,7 +110,7 @@ class ActionMacro(val c: MacroContext)
 
   def batchActionRows(quoted: Tree, method: String, numRows: Tree): Tree =
     expandBatchActionNew(quoted) {
-      case (batch, param, expanded, injectableLiftList, idiomNamingOriginalAstVars, transpileContext) =>
+      case (batch, param, expanded, injectableLiftList, idiomNamingOriginalAstVars, idiomContext) =>
         q"""
           ..${EnableReflectiveCalls(c)}
           ${c.prefix}.${TermName(method)}({
@@ -121,13 +121,13 @@ class ActionMacro(val c: MacroContext)
             */
             import io.getquill.util.OrderedGroupByExt._
             val originalAst = $idiomNamingOriginalAstVars
-            val transpileContext = $transpileContext
+            val idiomContext = $idiomContext
             /* for liftQuery(people:List[Person]) `batch` is `people` */
             /* TODO Need secondary check to see if context is actually capable of batch-values insert */
             /* If there is a INSERT ... VALUES clause this will be cnoded as ValuesClauseToken(lifts) which we need to duplicate */
             /* batches: List[List[Person]] */
             val batches =
-              if (io.getquill.context.CanDoBatchedInsert(originalAst, $numRows, idiom, naming, false, transpileContext) && $numRows != 1) {
+              if (io.getquill.context.CanDoBatchedInsert(originalAst, $numRows, idiom, naming, false, idiomContext) && $numRows != 1) {
                 $batch.toList.grouped($numRows).toList
               } else {
                 $batch.toList.map(element => List(element))
@@ -166,15 +166,15 @@ class ActionMacro(val c: MacroContext)
 
   def batchActionReturningRows[T](quoted: Tree, numRows: Tree)(implicit t: WeakTypeTag[T]): Tree =
     expandBatchActionNew(quoted) {
-      case (batch, param, expanded, injectableLiftList, idiomNamingOriginalAstVars, transpileContext) =>
+      case (batch, param, expanded, injectableLiftList, idiomNamingOriginalAstVars, idiomContext) =>
         q"""
           ..${EnableReflectiveCalls(c)}
           ${c.prefix}.executeBatchActionReturning({
             import io.getquill.util.OrderedGroupByExt._
             val originalAst = $idiomNamingOriginalAstVars
-            val transpileContext = $transpileContext
+            val idiomContext = $idiomContext
             val batches =
-              if (io.getquill.context.CanDoBatchedInsert(originalAst, $numRows, idiom, naming, true, transpileContext) && $numRows != 1) {
+              if (io.getquill.context.CanDoBatchedInsert(originalAst, $numRows, idiom, naming, true, idiomContext) && $numRows != 1) {
                 $batch.toList.grouped($numRows).toList
               } else {
                 $batch.toList.map(element => List(element))
@@ -246,12 +246,12 @@ class ActionMacro(val c: MacroContext)
                   q"($id, ($param) => ${liftUnlift.astLiftable(valuePlugLift)})"
               }
             val injectableLiftList = q"$injectableLiftListTrees"
-            val transpileContext = TranspileContext(transpileConfig, Some(alias.name))
+            val idiomContext = IdiomContext(transpileConfig, Some(alias.name))
 
             // Splice into the code to tokenize the ast (i.e. the Expand class) and compile-time translate the AST if possible
             val expanded =
               q"""
-              val (ast, statement, executionType) = ${translate(ast, Quat.Unknown, transpileContext)}
+              val (ast, statement, executionType) = ${translate(ast, Quat.Unknown, idiomContext)}
               io.getquill.context.ExpandWithInjectables(${c.prefix}, ast, statement, idiom, naming, executionType, subBatch, $injectableLiftList)
               """
 
@@ -262,7 +262,7 @@ class ActionMacro(val c: MacroContext)
               """
 
             val transpileContextExpr =
-              ConfigLiftables.transpileContextLiftable(transpileContext)
+              ConfigLiftables.transpileContextLiftable(idiomContext)
 
             c.untypecheck {
               call(batch, param, expanded, injectableLiftList, idiomNamingOriginalAstVars, transpileContextExpr)

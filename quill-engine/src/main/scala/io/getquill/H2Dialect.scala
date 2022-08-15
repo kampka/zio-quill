@@ -23,13 +23,13 @@ trait H2Dialect
   override def prepareForProbing(string: String) =
     s"PREPARE p${preparedStatementId.incrementAndGet.toString.token} AS $string}"
 
-  override def astTokenizer(implicit astTokenizer: Tokenizer[Ast], strategy: NamingStrategy, transpileContext: TranspileContext): Tokenizer[Ast] =
+  override def astTokenizer(implicit astTokenizer: Tokenizer[Ast], strategy: NamingStrategy, idiomContext: IdiomContext): Tokenizer[Ast] =
     Tokenizer[Ast] {
       case c: OnConflict => c.token
       case ast           => super.astTokenizer.token(ast)
     }
 
-  implicit def conflictTokenizer(implicit astTokenizer: Tokenizer[Ast], strategy: NamingStrategy, transpileContext: TranspileContext): Tokenizer[OnConflict] = {
+  implicit def conflictTokenizer(implicit astTokenizer: Tokenizer[Ast], strategy: NamingStrategy, idiomContext: IdiomContext): Tokenizer[OnConflict] = {
     import OnConflict._
     def tokenizer(implicit astTokenizer: Tokenizer[Ast]) =
       Tokenizer[OnConflict] {

@@ -5,7 +5,7 @@ import io.getquill.ast.{ Ast, Dynamic, Lift, Tag }
 import io.getquill.quotation.{ IsDynamic, LiftUnlift, Quotation }
 import io.getquill.util.LoadObject
 import io.getquill.util.MacroContextExt._
-import io.getquill.{ NamingStrategy, TranspileContext }
+import io.getquill.{ NamingStrategy, IdiomContext }
 import io.getquill.idiom._
 import io.getquill.quat.Quat
 
@@ -20,7 +20,7 @@ trait ContextMacro extends Quotation {
     summonPhaseDisable()
     q"""
       val (idiom, naming) = ${idiomAndNamingDynamic}
-      val (ast, statement, executionType) = ${translate(ast, topLevelQuat, TranspileContext(transpileConfig, None))}
+      val (ast, statement, executionType) = ${translate(ast, topLevelQuat, IdiomContext(transpileConfig, None))}
       io.getquill.context.Expand(${c.prefix}, ast, statement, idiom, naming, executionType)
     """
   }
@@ -32,10 +32,10 @@ trait ContextMacro extends Quotation {
         Dynamic(quoted)
       }
 
-  def translate(ast: Ast, topLevelQuat: Quat, transpileContext: TranspileContext): Tree =
+  def translate(ast: Ast, topLevelQuat: Quat, idiomContext: IdiomContext): Tree =
     IsDynamic(ast) match {
-      case false => translateStatic(ast, topLevelQuat, transpileContext)
-      case true  => translateDynamic(ast, topLevelQuat, transpileContext)
+      case false => translateStatic(ast, topLevelQuat, idiomContext)
+      case true  => translateDynamic(ast, topLevelQuat, idiomContext)
     }
 
   abstract class TokenLift(numQuatFields: Int) extends LiftUnlift(numQuatFields) {
@@ -56,13 +56,13 @@ trait ContextMacro extends Quotation {
     }
   }
 
-  private def translateStatic(ast: Ast, topLevelQuat: Quat, transpileContext: TranspileContext): Tree = {
+  private def translateStatic(ast: Ast, topLevelQuat: Quat, idiomContext: IdiomContext): Tree = {
     val liftUnlift = new { override val mctx: c.type = c } with TokenLift(ast.countQuatFields)
     import liftUnlift._
 
     idiomAndNamingStatic match {
       case Success((idiom, naming)) =>
-        val (normalizedAst, statement, _) = idiom.translate(ast, topLevelQuat, ExecutionType.Static, transpileContext)(naming)
+        val (normalizedAst, statement, _) = idiom.translate(ast, topLevelQuat, ExecutionType.Static, idiomContext)(naming)
 
         val (string, _) =
           ReifyStatement(
@@ -79,12 +79,12 @@ trait ContextMacro extends Quotation {
         q"($normalizedAst, ${statement: Token}, io.getquill.context.ExecutionType.Static)"
       case Failure(ex) =>
         c.info(s"Can't translate query at compile time because the idiom and/or the naming strategy aren't known at this point.")
-        translateDynamic(ast, topLevelQuat, transpileContext)
+        translateDynamic(ast, topLevelQuat, idiomContext)
     }
   }
 
-  private def translateDynamic(ast: Ast, topLevelQuat: Quat, transpileContext: TranspileContext): Tree = {
-    // TODO Need to build Liftables for transpileContext
+  private def translateDynamic(ast: Ast, topLevelQuat: Quat, idiomContext: IdiomContext): Tree = {
+    // TODO Need to build Liftables for idiomContext
     val liftUnlift = new { override val mctx: c.type = c } with TokenLift(ast.countQuatFields)
     import liftUnlift._
     val liftQuat: Liftable[Quat] = liftUnlift.quatLiftable
@@ -92,10 +92,10 @@ trait ContextMacro extends Quotation {
     val translateMethod = if (io.getquill.util.Messages.cacheDynamicQueries) {
       q"idiom.translateCached"
     } else q"idiom.translate"
-    // The `transpileContext` variable uses scala's provided list-liftable and the optionalPhaseLiftable
+    // The `idiomContext` variable uses scala's provided list-liftable and the optionalPhaseLiftable
     q"""
       val (idiom, naming) = ${idiomAndNamingDynamic}
-      $translateMethod(new _root_.io.getquill.norm.RepropagateQuats(${ConfigLiftables.transpileContextLiftable(transpileContext)}.traceConfig)($ast), ${liftQuat(topLevelQuat)}, io.getquill.context.ExecutionType.Dynamic, ${ConfigLiftables.transpileContextLiftable(transpileContext)})(naming)
+      $translateMethod(new _root_.io.getquill.norm.RepropagateQuats(${ConfigLiftables.transpileContextLiftable(idiomContext)}.traceConfig)($ast), ${liftQuat(topLevelQuat)}, io.getquill.context.ExecutionType.Dynamic, ${ConfigLiftables.transpileContextLiftable(idiomContext)})(naming)
     """
   }
 

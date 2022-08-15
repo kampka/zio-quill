@@ -25,7 +25,7 @@ trait PostgresDialect
 
   override protected def productAggregationToken: ProductAggregationToken = ProductAggregationToken.VariableDotStar
 
-  override def astTokenizer(implicit astTokenizer: Tokenizer[Ast], strategy: NamingStrategy, transpileContext: TranspileContext): Tokenizer[Ast] =
+  override def astTokenizer(implicit astTokenizer: Tokenizer[Ast], strategy: NamingStrategy, idiomContext: IdiomContext): Tokenizer[Ast] =
     Tokenizer[Ast] {
       case ListContains(ast, body) => stmt"${body.token} = ANY(${ast.token})"
       case c: OnConflict           => conflictTokenizer.token(c)
@@ -50,7 +50,7 @@ trait PostgresDialect
     s"PREPARE p${preparedStatementId.incrementAndGet.toString.token} AS $query"
   }
 
-  override protected def actionTokenizer(insertEntityTokenizer: Tokenizer[Entity])(implicit astTokenizer: Tokenizer[Ast], strategy: NamingStrategy, transpileContext: TranspileContext): Tokenizer[ast.Action] =
+  override protected def actionTokenizer(insertEntityTokenizer: Tokenizer[Entity])(implicit astTokenizer: Tokenizer[Ast], strategy: NamingStrategy, idiomContext: IdiomContext): Tokenizer[ast.Action] =
     Tokenizer[ast.Action] {
       // always need to have action-alias present because using FROM-values clause
       // TODO Shouldn't need any of this if non-batch queries are being used, can use regular UPDATE for that, should look into that optimization
@@ -66,13 +66,13 @@ object PostgresDialect extends PostgresDialect
 
 object PostgresDialectExt {
   //case class UpdateWithValues(action: Statement, where: Statement)
-  private[getquill] def updateWithValues(parentIdiom: SqlIdiom, action: ast.Action, alias: Ident)(implicit strategy: NamingStrategy, transpileContext: TranspileContext): Statement = {
+  private[getquill] def updateWithValues(parentIdiom: SqlIdiom, action: ast.Action, alias: Ident)(implicit strategy: NamingStrategy, idiomContext: IdiomContext): Statement = {
     val idiom = copyIdiom(parentIdiom, Some(alias))
     import idiom._
 
     implicit val stableTokenizer = idiom.astTokenizer(new Tokenizer[Ast] {
-      override def token(v: Ast): Token = astTokenizer(this, strategy, transpileContext).token(v)
-    }, strategy, transpileContext)
+      override def token(v: Ast): Token = astTokenizer(this, strategy, idiomContext).token(v)
+    }, strategy, idiomContext)
 
     //    UPDATE people AS p SET id = p.id, name = p.name, age = p.age
     //    FROM (values (1, 'Joe', 111), (2, 'Jack', 222))
@@ -114,7 +114,7 @@ object PostgresDialectExt {
         // The SET columns/values i.e. ([name, id], [STag(uid:1), STag(uid:2)]
         val (columns, values) = columnsAndValues(assignments)
         // I.e. `ps`
-        val colsIdStr = transpileContext.batchAlias.getOrElse { throw new IllegalArgumentException("Batch alias not detected!") }
+        val colsIdStr = idiomContext.batchAlias.getOrElse { throw new IllegalArgumentException("Batch alias not detected!") }
         val colsId = colsIdStr.token
         // All the lifts in the WHERE clause that we need to put into the actual VALUES clause instead
         // Originally was `WHERE ps.id = STag(uid:3)`

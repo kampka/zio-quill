@@ -12,7 +12,7 @@ import io.getquill.idiom.Token
 import io.getquill.norm.NormalizeCaching
 import io.getquill.quat.Quat
 import io.getquill.util.Interleave
-import io.getquill.TranspileContext
+import io.getquill.IdiomContext
 
 object CqlIdiom extends CqlIdiom with CannotReturn
 
@@ -24,14 +24,14 @@ trait CqlIdiom extends Idiom {
 
   override def prepareForProbing(string: String) = string
 
-  override def translate(ast: Ast, topLevelQuat: Quat, executionType: ExecutionType, transpileContext: TranspileContext)(implicit naming: NamingStrategy) = {
-    val cqlNormalize = new CqlNormalize(transpileContext.config)
+  override def translate(ast: Ast, topLevelQuat: Quat, executionType: ExecutionType, idiomContext: IdiomContext)(implicit naming: NamingStrategy) = {
+    val cqlNormalize = new CqlNormalize(idiomContext.config)
     val normalizedAst = cqlNormalize(ast)
     (normalizedAst, stmt"${normalizedAst.token}", executionType)
   }
 
-  override def translateCached(ast: Ast, topLevelQuat: Quat, executionType: ExecutionType, transpileContext: TranspileContext)(implicit naming: NamingStrategy) = {
-    val cqlNormalize = new CqlNormalize(transpileContext.config)
+  override def translateCached(ast: Ast, topLevelQuat: Quat, executionType: ExecutionType, idiomContext: IdiomContext)(implicit naming: NamingStrategy) = {
+    val cqlNormalize = new CqlNormalize(idiomContext.config)
     val normalizedAst = NormalizeCaching(cqlNormalize.apply)(ast)
     (normalizedAst, stmt"${normalizedAst.token}", executionType)
   }

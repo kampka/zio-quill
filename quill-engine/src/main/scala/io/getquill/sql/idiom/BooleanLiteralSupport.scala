@@ -10,12 +10,12 @@ import io.getquill.norm.{ ConcatBehavior, EqualityBehavior }
 import io.getquill.quat.Quat
 import io.getquill.sql.norm.VendorizeBooleans
 import io.getquill.util.Messages
-import io.getquill.TranspileContext
+import io.getquill.IdiomContext
 
 trait BooleanLiteralSupport extends SqlIdiom {
 
-  override def normalizeAst(ast: Ast, concatBehavior: ConcatBehavior, equalityBehavior: EqualityBehavior, transpileContext: TranspileContext) = {
-    val norm = SqlNormalize(ast, transpileContext.config, concatBehavior, equalityBehavior)
+  override def normalizeAst(ast: Ast, concatBehavior: ConcatBehavior, equalityBehavior: EqualityBehavior, idiomContext: IdiomContext) = {
+    val norm = SqlNormalize(ast, idiomContext.config, concatBehavior, equalityBehavior)
     if (Messages.smartBooleans)
       VendorizeBooleans(norm)
     else

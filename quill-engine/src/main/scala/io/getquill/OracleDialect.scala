@@ -22,8 +22,8 @@ trait OracleDialect
 
   override def useActionTableAliasAs: ActionTableAliasBehavior = ActionTableAliasBehavior.Hide
 
-  class OracleFlattenSqlQueryTokenizerHelper(q: FlattenSqlQuery)(implicit astTokenizer: Tokenizer[Ast], strategy: NamingStrategy, transpileContext: TranspileContext)
-    extends FlattenSqlQueryTokenizerHelper(q)(astTokenizer, strategy, transpileContext) {
+  class OracleFlattenSqlQueryTokenizerHelper(q: FlattenSqlQuery)(implicit astTokenizer: Tokenizer[Ast], strategy: NamingStrategy, idiomContext: IdiomContext)
+    extends FlattenSqlQueryTokenizerHelper(q)(astTokenizer, strategy, idiomContext) {
     import q._
 
     override def withFrom: Statement = from match {
@@ -34,7 +34,7 @@ trait OracleDialect
     }
   }
 
-  override implicit def sqlQueryTokenizer(implicit astTokenizer: Tokenizer[Ast], strategy: NamingStrategy, transpileContext: TranspileContext): Tokenizer[SqlQuery] = Tokenizer[SqlQuery] {
+  override implicit def sqlQueryTokenizer(implicit astTokenizer: Tokenizer[Ast], strategy: NamingStrategy, idiomContext: IdiomContext): Tokenizer[SqlQuery] = Tokenizer[SqlQuery] {
     case q: FlattenSqlQuery =>
       new OracleFlattenSqlQueryTokenizerHelper(q).apply
     case other =>

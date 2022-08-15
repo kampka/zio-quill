@@ -21,7 +21,7 @@ trait SqliteDialect
 
   override def prepareForProbing(string: String) = s"sqlite3_prepare_v2($string)"
 
-  override def astTokenizer(implicit astTokenizer: Tokenizer[Ast], strategy: NamingStrategy, transpileContext: TranspileContext): Tokenizer[Ast] =
+  override def astTokenizer(implicit astTokenizer: Tokenizer[Ast], strategy: NamingStrategy, idiomContext: IdiomContext): Tokenizer[Ast] =
     Tokenizer[Ast] {
       case c: OnConflict => conflictTokenizer.token(c)
       case ast           => super.astTokenizer.token(ast)
