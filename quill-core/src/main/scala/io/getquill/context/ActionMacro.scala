@@ -246,7 +246,7 @@ class ActionMacro(val c: MacroContext)
                   q"($id, ($param) => ${liftUnlift.astLiftable(valuePlugLift)})"
               }
             val injectableLiftList = q"$injectableLiftListTrees"
-            val idiomContext = IdiomContext(transpileConfig, Some(alias.name))
+            val idiomContext = IdiomContext(transpileConfig, IdiomContext.QueryType.Batch(alias.name))
 
             // Splice into the code to tokenize the ast (i.e. the Expand class) and compile-time translate the AST if possible
             val expanded =

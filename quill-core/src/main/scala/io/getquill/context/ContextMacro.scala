@@ -20,7 +20,7 @@ trait ContextMacro extends Quotation {
     summonPhaseDisable()
     q"""
       val (idiom, naming) = ${idiomAndNamingDynamic}
-      val (ast, statement, executionType) = ${translate(ast, topLevelQuat, IdiomContext(transpileConfig, None))}
+      val (ast, statement, executionType) = ${translate(ast, topLevelQuat, IdiomContext(transpileConfig, IdiomContext.QueryType.Regular))}
       io.getquill.context.Expand(${c.prefix}, ast, statement, idiom, naming, executionType)
     """
   }

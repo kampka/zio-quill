@@ -79,14 +79,9 @@ object PostgresDialectExt {
     //    AS c(id, name, age)
     //    WHERE c.id = p.id
 
-    // NOTE going to need to test this with multi-level variables & renamed variables as well as variable conflicts with main body
-    def extractLiftsFromFilter(where: Ast): Ast = {
-      null
-    }
-
     // Uses the `alias` passed in as `actionAlias` since that is now assigned to the copied SqlIdiom
-    action match {
-      case Update(Filter(table: Entity, x, where), assignments) =>
+    (action, idiomContext.queryType) match {
+      case (Update(Filter(table: Entity, x, where), assignments), IdiomContext.QueryType.Batch(batchAlias)) =>
         // Original Query looks like:
         //   liftQuery(people).foreach(ps => query[Person].filter(p => p.id == ps.id).update(_.name -> ps.name))
         // This has already been transpiled to (foreach part has been removed):
@@ -114,7 +109,7 @@ object PostgresDialectExt {
         // The SET columns/values i.e. ([name, id], [STag(uid:1), STag(uid:2)]
         val (columns, values) = columnsAndValues(assignments)
         // I.e. `ps`
-        val colsIdStr = idiomContext.batchAlias.getOrElse { throw new IllegalArgumentException("Batch alias not detected!") }
+        val colsIdStr = batchAlias
         val colsId = colsIdStr.token
         // All the lifts in the WHERE clause that we need to put into the actual VALUES clause instead
         // Originally was `WHERE ps.id = STag(uid:3)`
@@ -126,7 +121,7 @@ object PostgresDialectExt {
         val asColumns = (columns ++ additionalColumns.map(_.token)).mkStmt(", ")
         stmt"UPDATE ${table.token}${` AS [table]`} SET $setColumns FROM (VALUES ${ValuesClauseToken(stmt"(${values.mkStmt(", ")})")}) AS ${colsId}($asColumns) WHERE ${replacedWhere.token}"
 
-      case Update(table: Entity, assignments) =>
+      case (Update(table: Entity, assignments), _) =>
         stmt"UPDATE ${table.token}${` AS [table]`} SET ${assignments.token}"
 
       case _ =>
