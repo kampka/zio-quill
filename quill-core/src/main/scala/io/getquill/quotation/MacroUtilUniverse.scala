@@ -5,22 +5,14 @@ import io.getquill.{ IdiomContext, Quoted }
 import scala.reflect.api.Universe
 import scala.reflect.macros.whitebox.Context
 
-trait QueryTypeInferringOrFail extends QueryTypeInferring {
+trait MacroUtilBase extends MacroUtilUniverse {
   val c: Context
   type Uni = c.universe.type
   // NOTE: u needs to be lazy otherwise sets value from c before c can be initialized by higher level classes
   lazy val u: Uni = c.universe
-  import u.{ Block => _, Constant => _, Function => _, Ident => _, If => _, _ }
-  import io.getquill.util.MacroContextExt._
-
-  def parseQueryTypeOrFail(tpe: Type): IdiomContext.QueryType =
-    parseQueryType(tpe) match {
-      case Some(value) => value
-      case _           => c.fail(s"Could not understand the query type: ${show(tpe)}")
-    }
 }
 
-trait QueryTypeInferring {
+trait MacroUtilUniverse {
   type Uni <: Universe
   val u: Uni
   import u.{ Block => _, Constant => _, Function => _, Ident => _, If => _, _ }

@@ -1,6 +1,6 @@
 package io.getquill.quat
 
-import io.getquill.quotation.{ QueryTypeInferring, QueryTypeInferringOrFail }
+import io.getquill.quotation.{ MacroUtilUniverse, MacroUtilBase }
 
 import java.lang.reflect.Method
 import io.getquill.{ Embedded, Udt }
@@ -16,7 +16,7 @@ object QuatMaking {
   case object IgnoreDecoders extends IgnoreDecoders
 }
 
-trait QuatMaking extends QuatMakingBase with QueryTypeInferringOrFail {
+trait QuatMaking extends QuatMakingBase with MacroUtilBase {
   val c: Context
   override type Uni = c.universe.type
   // NOTE: u needs to be lazy otherwise sets value from c before c can be initialized by higher level classes
@@ -140,7 +140,7 @@ abstract class TypeTaggedQuatMaking extends QuatMakingBase {
   def quatValueTypes: List[universe.Type]
 }
 
-trait QuatMakingBase extends QueryTypeInferring {
+trait QuatMakingBase extends MacroUtilUniverse {
   type Uni <: Universe
   val u: Uni
   import u.{ Block => _, Constant => _, Function => _, Ident => _, If => _, _ }

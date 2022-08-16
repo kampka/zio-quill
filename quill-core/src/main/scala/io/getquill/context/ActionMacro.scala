@@ -22,12 +22,12 @@ class ActionMacro(val c: MacroContext)
     translateQueryPrettyPrint(quoted, q"false")
 
   def translateQueryPrettyPrint(quoted: Tree, prettyPrint: Tree): Tree =
-    expand(extractAst(quoted), inferQuat(quoted.tpe), parseQueryTypeOrFail(quoted.tpe)) match {
-      case (idiomContext, expanded) =>
+    expand(extractAst(quoted), inferQuat(quoted.tpe)) match {
+      // Leave the code in this match-form in case we want `expand` to return a tuple in the future
+      case expanded =>
         c.untypecheck {
           q"""
             ..${EnableReflectiveCalls(c)}
-            val idiomContext = $idiomContext
             val expanded = $expanded
             ${c.prefix}.translateQuery(
               expanded.string,
@@ -61,12 +61,11 @@ class ActionMacro(val c: MacroContext)
     }
 
   def runAction(quoted: Tree): Tree =
-    expand(extractAst(quoted), Quat.Value, parseQueryTypeOrFail(quoted.tpe)) match {
-      case (idiomContext, expanded) =>
+    expand(extractAst(quoted), Quat.Value) match {
+      case expanded =>
         c.untypecheck {
           q"""
             ..${EnableReflectiveCalls(c)}
-            val idiomContext = $idiomContext
             val expanded = $expanded
             ${c.prefix}.executeAction(
               expanded.string,
@@ -77,12 +76,12 @@ class ActionMacro(val c: MacroContext)
     }
 
   def runActionReturning[T](quoted: Tree)(implicit t: WeakTypeTag[T]): Tree =
-    expand(extractAst(quoted), inferQuat(t.tpe), parseQueryTypeOrFail(quoted.tpe)) match {
-      case (idiomContext, expanded) =>
+    expand(extractAst(quoted), inferQuat(t.tpe)) match {
+      // Leave the code in this match-form in case we want `expand` to return a tuple in the future
+      case expanded =>
         c.untypecheck {
           q"""
             ..${EnableReflectiveCalls(c)}
-            val idiomContext = $idiomContext
             val expanded = $expanded
             ${c.prefix}.executeActionReturning(
               expanded.string,
@@ -95,12 +94,12 @@ class ActionMacro(val c: MacroContext)
     }
 
   def runActionReturningMany[T](quoted: Tree)(implicit t: WeakTypeTag[T]): Tree =
-    expand(extractAst(quoted), inferQuat(t.tpe), parseQueryTypeOrFail(quoted.tpe)) match {
-      case (idiomContext, expanded) =>
+    expand(extractAst(quoted), inferQuat(t.tpe)) match {
+      // Leave the code in this match-form in case we want `expand` to return a tuple in the future
+      case expanded =>
         c.untypecheck {
           q"""
             ..${EnableReflectiveCalls(c)}
-            val idiomContext = $idiomContext
             val expanded = $expanded
             ${c.prefix}.executeActionReturningMany(
               expanded.string,
@@ -212,7 +211,7 @@ class ActionMacro(val c: MacroContext)
 
   def expandBatchActionNew(quoted: Tree)(call: (Tree, Tree, Tree, Tree, Tree, Tree) => Tree): Tree =
     BetaReduction(extractAst(quoted)) match {
-      case Foreach(lift: Lift, alias, body) =>
+      case totalAst @ Foreach(lift: Lift, alias, body) =>
         // for liftQuery(people:List[Person]) this is: `people`
         val batch = lift.value.asInstanceOf[Tree]
         // This would be the Type[Person]
@@ -257,13 +256,13 @@ class ActionMacro(val c: MacroContext)
                   q"($id, ($param) => ${liftUnlift.astLiftable(valuePlugLift)})"
               }
             val injectableLiftList = q"$injectableLiftListTrees"
-            val queryType = parseQueryTypeOrFail(quoted.tpe)
+            val queryType = IdiomContext.QueryType.discoverFromAst(totalAst)
             val idiomContext = IdiomContext(transpileConfig, queryType)
 
             // Splice into the code to tokenize the ast (i.e. the Expand class) and compile-time translate the AST if possible
             val expanded =
               q"""
-              val (ast, statement, executionType) = ${translate(ast, Quat.Unknown, idiomContext)}
+              val (ast, statement, executionType, _) = ${translate(ast, Quat.Unknown)}
               io.getquill.context.ExpandWithInjectables(${c.prefix}, ast, statement, idiom, naming, executionType, subBatch, $injectableLiftList)
               """
 
@@ -333,7 +332,7 @@ class ActionMacro(val c: MacroContext)
 
   def expandBatchAction(quoted: Tree)(call: (Tree, Tree, Tree, Tree) => Tree): Tree =
     BetaReduction(extractAst(quoted)) match {
-      case ast @ Foreach(lift: Lift, alias, body) =>
+      case totalAst @ Foreach(lift: Lift, alias, body) =>
         val batch = lift.value.asInstanceOf[Tree]
         val batchItemType = batch.tpe.typeArgs.head
         c.typecheck(q"(value: $batchItemType) => value") match {
@@ -346,9 +345,16 @@ class ActionMacro(val c: MacroContext)
                   CaseClassValueLift("value", "value", value, quat)
               }
             val (ast, _) = reifyLiftings(BetaReduction(body, alias -> nestedLift))
-            val (idiomContext, expanded) = expand(ast, Quat.Unknown, parseQueryTypeOrFail(quoted.tpe))
+            val expanded = expand(ast, Quat.Unknown)
+            // Create the idiom context. Since we know the AST here is compile-time can infer QueryType directly from it
+            val idiomContext =
+              IdiomContext(
+                summonTranspileConfig(),
+                IdiomContext.QueryType.discoverFromAst(totalAst)
+              )
+            val idiomContextExpr = ConfigLiftables.transpileContextLiftable(idiomContext)
             c.untypecheck {
-              call(batch, param, idiomContext, expanded)
+              call(batch, param, idiomContextExpr, expanded)
             }
         }
       case other =>
@@ -359,7 +365,7 @@ class ActionMacro(val c: MacroContext)
     c.untypecheck {
       q"""
         ..${EnableReflectiveCalls(c)}
-        val (idiomContext, expanded) = ${expand(extractAst(quoted), Quat.Value, parseQueryTypeOrFail(quoted.tpe))}
+        val expanded = ${expand(extractAst(quoted), Quat.Value)}
         ${c.prefix}.prepareAction(
           expanded.string,
           expanded.prepare
