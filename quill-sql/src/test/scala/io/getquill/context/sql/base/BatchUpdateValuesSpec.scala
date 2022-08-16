@@ -14,16 +14,17 @@ trait BatchUpdateValuesSpec extends Spec with BeforeAndAfterEach {
     ContactBase("Joe", "Bloggs", 22),
     ContactBase("A", "A", 111),
     ContactBase("B", "B", 111),
-    ContactBase("Joe", "Roggs", 33),
+    ContactBase("Jan", "Roggs", 33),
     ContactBase("C", "C", 111),
     ContactBase("D", "D", 111),
-    ContactBase("Jim", "Jones", 44),
-    ContactBase("Jim", "Domes", 55),
+    ContactBase("James", "Jones", 44),
+    ContactBase("Dale", "Domes", 55),
     ContactBase("Caboose", "Castle", 66),
     ContactBase("E", "E", 111)
   )
-  def includeInUpdate(c: ContactBase) = c.firstName == "Joe" || c.firstName == "Jim" || c.firstName == "Caboose"
-  val updateBase = dataBase.filter(includeInUpdate(_))
+  def includeInUpdate(c: ContactBase) = List("Joe", "Jan", "James", "Dale", "Caboose").contains(c.firstName)
+  val updateBase =
+    dataBase.filter(includeInUpdate(_)).map(r => r.copy(lastName = r.lastName + "U"))
   val expectBase = dataBase.map { r =>
     if (includeInUpdate(r)) r.copy(lastName = r.lastName + "U") else r
   }
@@ -34,7 +35,7 @@ trait BatchUpdateValuesSpec extends Spec with BeforeAndAfterEach {
     implicit class AdaptOps(list: List[ContactBase]) {
       def adapt: List[Row] = list.map(makeData(_))
     }
-    lazy val update = dataBase.adapt
+    lazy val updateData = updateBase.adapt
     lazy val expect = expectBase.adapt
     lazy val data = dataBase.adapt
   }
@@ -45,10 +46,10 @@ trait BatchUpdateValuesSpec extends Spec with BeforeAndAfterEach {
     override def makeData(c: ContactBase): Contact = Contact(c.firstName, c.lastName, c.age)
 
     val insert = quote {
-      liftQuery(data).foreach(ps => query[Contact].insertValue(ps))
+      liftQuery(data: List[Contact]).foreach(ps => query[Contact].insertValue(ps))
     }
-    val q = quote {
-      liftQuery(update).foreach(ps =>
+    val update = quote {
+      liftQuery(updateData: List[Contact]).foreach(ps =>
         query[Contact].filter(p => p.firstName == ps.firstName).updateValue(ps))
     }
     val get = quote(query[Contact])
@@ -65,15 +66,15 @@ trait BatchUpdateValuesSpec extends Spec with BeforeAndAfterEach {
     }
 
     val insert = quote {
-      liftQuery(data).foreach(ps => query[ContactTable].insertValue(ps))
+      liftQuery(data: List[ContactTable]).foreach(ps => contacts.insertValue(ps))
     }
-    val q = quote {
-      liftQuery(update).foreach(ps =>
+    val update = quote {
+      liftQuery(updateData: List[ContactTable]).foreach(ps =>
         contacts
           .filter(p => p.name.map(_.first) == ps.name.map(_.first))
           .update(_.name.map(_.last) -> ps.name.map(_.last)))
     }
-    val get = quote(query[ContactTable])
+    val get = quote(contacts)
   }
 
   object `Ex 3 - Deep Embedded Optional` extends Adaptable {
@@ -85,13 +86,13 @@ trait BatchUpdateValuesSpec extends Spec with BeforeAndAfterEach {
     override def makeData(c: ContactBase): Contact = Contact(Some(Name(FirstName(Option(c.firstName)), LastName(Option(c.lastName)))), c.age)
 
     val insert = quote {
-      liftQuery(data).foreach(ps => query[Contact].insertValue(ps))
+      liftQuery(data: List[Contact]).foreach(ps => query[Contact].insertValue(ps))
     }
-    val q = quote {
-      liftQuery(update).foreach(ps =>
+    val update = quote {
+      liftQuery(updateData: List[Contact]).foreach(ps =>
         query[Contact]
-          .filter(p => p.name.flatMap(_.first.firstName) == ps.name.flatMap(_.first.firstName))
-          .update(_.name.flatMap(_.last.lastName) -> ps.name.flatMap(_.last.lastName)))
+          .filter(p => p.name.map(_.first.firstName) == ps.name.map(_.first.firstName))
+          .update(_.name.map(_.last.lastName) -> ps.name.map(_.last.lastName)))
     }
     val get = quote(query[Contact])
   }

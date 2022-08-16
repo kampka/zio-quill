@@ -8,28 +8,29 @@ class BatchUpdateValuesJdbcSpec extends BatchUpdateValuesSpec {
   import testContext._
 
   override def beforeEach(): Unit = {
-    testContext.run(query[ContactBase].delete)
+    val schema = quote(querySchema[ContactBase]("Contact"))
+    testContext.run(schema.delete)
     super.beforeEach()
   }
 
   "Ex 1 - Simple Contact" in {
     import `Ex 1 - Simple Contact`._
     context.run(insert)
-    context.run(update)
-    context.run(get) mustEqual (expect)
+    context.run(update, 2)
+    context.run(get).toSet mustEqual (expect.toSet)
   }
 
   "Ex 2 - Optional Embedded with Renames" in {
     import `Ex 2 - Optional Embedded with Renames`._
     context.run(insert)
-    context.run(update)
-    context.run(get) mustEqual (expect)
+    context.run(update, 2)
+    context.run(get).toSet mustEqual (expect.toSet)
   }
 
   "Ex 3 - Deep Embedded Optional" in {
     import `Ex 3 - Deep Embedded Optional`._
     context.run(insert)
-    context.run(update)
-    context.run(get) mustEqual (expect)
+    context.run(update, 2)
+    context.run(get).toSet mustEqual (expect.toSet)
   }
 }
