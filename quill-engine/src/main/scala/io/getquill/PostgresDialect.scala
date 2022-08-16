@@ -3,10 +3,11 @@ package io.getquill
 import java.util.concurrent.atomic.AtomicInteger
 import io.getquill.ast.{ Action, _ }
 import io.getquill.ast
+import io.getquill.context.sql.idiom
 import io.getquill.context.sql.idiom.SqlIdiom.{ InsertUpdateStmt, copyIdiom }
 import io.getquill.context.{ CanInsertReturningWithMultiValues, CanInsertWithMultiValues, CanReturnClause }
 import io.getquill.context.sql.idiom._
-import io.getquill.idiom.{ Statement, Token, ValuesClauseToken }
+import io.getquill.idiom.{ ScalarTagToken, Statement, Token, ValuesClauseToken }
 import io.getquill.idiom.StatementInterpolator._
 import io.getquill.norm.ProductAggregationToken
 import io.getquill.util.Messages.fail
@@ -59,9 +60,15 @@ trait PostgresDialect
         super.actionTokenizer(insertEntityTokenizer).token(other)
     }
 
+  protected def specialPropertyTokenizer(implicit astTokenizer: Tokenizer[Ast], strategy: NamingStrategy, idiomContext: IdiomContext) =
+    Tokenizer.withFallback[Ast](this.astTokenizer(_, strategy, idiomContext)) {
+      case p: Property => this.propertyTokenizer.token(p)
+    }
+
   object ConcatableBatchUpdate {
+
     //case class UpdateWithValues(action: Statement, where: Statement)
-    def unapply(action: ast.Update)(implicit astTokenizer: Tokenizer[Ast], strategy: NamingStrategy, idiomContext: IdiomContext): Option[Statement] = {
+    def unapply(action: ast.Update)(implicit actionAstTokenizer: Tokenizer[Ast], strategy: NamingStrategy, idiomContext: IdiomContext): Option[Statement] = {
 
       //    Typical Postgres batch update syntax
       //    UPDATE people AS p SET id = p.id, name = p.name, age = p.age
@@ -71,7 +78,7 @@ trait PostgresDialect
 
       // Uses the `alias` passed in as `actionAlias` since that is now assigned to the copied SqlIdiom
       (action, idiomContext.queryType) match {
-        case (Update(Filter(table: Entity, x, where), assignments), IdiomContext.QueryType.Batch(batchAlias)) =>
+        case (Update(Filter(table: Entity, tableAlias, where), assignments), IdiomContext.QueryType.Batch(batchAlias)) =>
           // Original Query looks like:
           //   liftQuery(people).foreach(ps => query[Person].filter(p => p.id == ps.id).update(_.name -> ps.name))
           // This has already been transpiled to (foreach part has been removed):
@@ -105,11 +112,13 @@ trait PostgresDialect
           // Originally was `WHERE ps.id = STag(uid:3)`
           // (replacedWhere: `WHERE ps.id = p.id1`, additionalColumns: [id] /*and any other column names of STags in WHERE*/, additionalLifts: [STag(uid:3)])
           val (replacedWhere, additionalColumns, additionalLifts) = ReplaceLiftings.of(where)(colsId, columns.map(_.toString))
+          // STags for values specified to be inserted [name, id] i.e. [STag(uid:1), STag(uid:2)] and the STag for the additional [id] column i.e. STag(uid:3)
+          val allValues = values ++ additionalLifts.map(ScalarTagToken(_))
           // The columns that go in the SET clause i.e. `SET name = ps.name, id = ps.id`
           val setColumns = columns.map(col => stmt"$col = ${colsId.token}.$col").mkStmt(", ")
           // The columns that go inside ps(name, id, id1) i.e. stmt"name, id, id1"
           val asColumns = (columns ++ additionalColumns.map(_.token)).mkStmt(", ")
-          val output = stmt"UPDATE ${table.token}${` AS [table]`} SET $setColumns FROM (VALUES ${ValuesClauseToken(stmt"(${values.mkStmt(", ")})")}) AS ${colsId.token}($asColumns) WHERE ${replacedWhere.token}"
+          val output = stmt"UPDATE ${table.token} AS ${tableAlias.token} SET $setColumns FROM (VALUES ${ValuesClauseToken(stmt"(${allValues.mkStmt(", ")})")}) AS ${colsId.token}($asColumns) WHERE ${specialPropertyTokenizer.token(replacedWhere)}"
           Some(output)
 
         case (Update(table: Entity, assignments), IdiomContext.QueryType.Batch(batchAlias)) =>
@@ -117,7 +126,8 @@ trait PostgresDialect
           val (columns, values) = columnsAndValues(assignments)
           val setColumns = columns.map(col => stmt"$col = ${colsId.token}.$col").mkStmt(", ")
           val asColumns = columns.mkStmt(", ")
-          val output = stmt"UPDATE ${table.token}${` AS [table]`} SET $setColumns FROM (VALUES ${ValuesClauseToken(stmt"(${values.mkStmt(", ")})")}) AS ${colsId.token}($asColumns)"
+          // TODO THERE'S NO TABLE-ALIAS (only a batch alias). Need to make sure to test this works.
+          val output = stmt"UPDATE ${table.token} SET $setColumns FROM (VALUES ${ValuesClauseToken(stmt"(${values.mkStmt(", ")})")}) AS ${colsId.token}($asColumns)"
           Some(output)
 
         case _ =>
