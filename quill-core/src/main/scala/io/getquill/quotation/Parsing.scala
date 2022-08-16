@@ -20,7 +20,7 @@ import io.getquill.util.Messages.TraceType
 import io.getquill.util.{ Interleave, Interpolator, Messages }
 import io.getquill.{ Quoted, Delete => DslDelete, Insert => DslInsert, Query => DslQuery, Update => DslUpdate }
 
-trait Parsing extends ValueComputation with QuatMaking {
+trait Parsing extends ValueComputation with QuatMaking with QueryTypeInferringOrFail {
   this: Quotation =>
 
   import c.universe.{ Ident => _, Constant => _, Function => _, If => _, Block => _, _ }

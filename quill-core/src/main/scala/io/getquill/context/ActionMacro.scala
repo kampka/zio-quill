@@ -22,7 +22,7 @@ class ActionMacro(val c: MacroContext)
     translateQueryPrettyPrint(quoted, q"false")
 
   def translateQueryPrettyPrint(quoted: Tree, prettyPrint: Tree): Tree =
-    expand(extractAst(quoted), inferQuat(quoted.tpe)) match {
+    expand(extractAst(quoted), inferQuat(quoted.tpe), parseQueryTypeOrFail(quoted.tpe)) match {
       case (idiomContext, expanded) =>
         c.untypecheck {
           q"""
@@ -61,7 +61,7 @@ class ActionMacro(val c: MacroContext)
     }
 
   def runAction(quoted: Tree): Tree =
-    expand(extractAst(quoted), Quat.Value) match {
+    expand(extractAst(quoted), Quat.Value, parseQueryTypeOrFail(quoted.tpe)) match {
       case (idiomContext, expanded) =>
         c.untypecheck {
           q"""
@@ -77,7 +77,7 @@ class ActionMacro(val c: MacroContext)
     }
 
   def runActionReturning[T](quoted: Tree)(implicit t: WeakTypeTag[T]): Tree =
-    expand(extractAst(quoted), inferQuat(t.tpe)) match {
+    expand(extractAst(quoted), inferQuat(t.tpe), parseQueryTypeOrFail(quoted.tpe)) match {
       case (idiomContext, expanded) =>
         c.untypecheck {
           q"""
@@ -95,7 +95,7 @@ class ActionMacro(val c: MacroContext)
     }
 
   def runActionReturningMany[T](quoted: Tree)(implicit t: WeakTypeTag[T]): Tree =
-    expand(extractAst(quoted), inferQuat(t.tpe)) match {
+    expand(extractAst(quoted), inferQuat(t.tpe), parseQueryTypeOrFail(quoted.tpe)) match {
       case (idiomContext, expanded) =>
         c.untypecheck {
           q"""
@@ -257,7 +257,8 @@ class ActionMacro(val c: MacroContext)
                   q"($id, ($param) => ${liftUnlift.astLiftable(valuePlugLift)})"
               }
             val injectableLiftList = q"$injectableLiftListTrees"
-            val idiomContext = IdiomContext(transpileConfig, IdiomContext.QueryType.Batch(alias.name))
+            val queryType = parseQueryTypeOrFail(quoted.tpe)
+            val idiomContext = IdiomContext(transpileConfig, queryType)
 
             // Splice into the code to tokenize the ast (i.e. the Expand class) and compile-time translate the AST if possible
             val expanded =
@@ -345,7 +346,7 @@ class ActionMacro(val c: MacroContext)
                   CaseClassValueLift("value", "value", value, quat)
               }
             val (ast, _) = reifyLiftings(BetaReduction(body, alias -> nestedLift))
-            val (idiomContext, expanded) = expand(ast, Quat.Unknown)
+            val (idiomContext, expanded) = expand(ast, Quat.Unknown, parseQueryTypeOrFail(quoted.tpe))
             c.untypecheck {
               call(batch, param, idiomContext, expanded)
             }
@@ -358,7 +359,7 @@ class ActionMacro(val c: MacroContext)
     c.untypecheck {
       q"""
         ..${EnableReflectiveCalls(c)}
-        val (idiomContext, expanded) = ${expand(extractAst(quoted), Quat.Value)}
+        val (idiomContext, expanded) = ${expand(extractAst(quoted), Quat.Value, parseQueryTypeOrFail(quoted.tpe))}
         ${c.prefix}.prepareAction(
           expanded.string,
           expanded.prepare

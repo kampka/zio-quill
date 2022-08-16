@@ -16,8 +16,8 @@ trait ContextMacro extends Quotation {
   val c: MacroContext
   import c.universe.{ Function => _, Ident => _, _ }
 
-  protected def expand(ast: Ast, topLevelQuat: Quat): (Tree, Tree) = {
-    val idiomContextVar = IdiomContext(transpileConfig, IdiomContext.QueryType.Regular)
+  protected def expand(ast: Ast, topLevelQuat: Quat, queryType: IdiomContext.QueryType): (Tree, Tree) = {
+    val idiomContextVar = IdiomContext(transpileConfig, queryType)
     summonPhaseDisable()
     (
       ConfigLiftables.transpileContextLiftable(idiomContextVar),
