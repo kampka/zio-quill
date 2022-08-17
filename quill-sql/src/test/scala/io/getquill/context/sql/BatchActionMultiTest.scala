@@ -90,13 +90,37 @@ class BatchActionMultiTest extends Spec {
       }
     }
 
-    "fallback for non-insert query" - {
+    "fallback for non-insert query (in a context that doesn't support update)" - {
+      val ctx: MirrorContext[MySQLDialect, Literal] = new MirrorContext[MySQLDialect, Literal](MySQLDialect, Literal)
+      import ctx._
       val people = List(Person(1, "A", 111), Person(2, "B", 222), Person(3, "C", 333), Person(4, "D", 444), Person(5, "E", 555))
       def expect(executionType: ExecutionType) =
         List(
           (
-            "UPDATE Person AS pt SET id = ?, name = ?, age = ? WHERE pt.id = ?",
+            "UPDATE Person pt SET id = ?, name = ?, age = ? WHERE pt.id = ?",
             List(List(1, "A", 111, 1), List(2, "B", 222, 2), List(3, "C", 333, 3), List(4, "D", 444, 4), List(5, "E", 555, 5)),
+            executionType
+          )
+        )
+
+      "static" in {
+        val static = ctx.run(quote(liftQuery(people).foreach(p => updatePeopleById(p))), 2)
+        static.tripleBatchMulti mustEqual expect(ExecutionType.Unknown)
+      }
+    }
+
+    "update query" - {
+      val people = List(Person(1, "A", 111), Person(2, "B", 222), Person(3, "C", 333), Person(4, "D", 444), Person(5, "E", 555))
+      def expect(executionType: ExecutionType) =
+        List(
+          (
+            "UPDATE Person AS pt SET id = p.id, name = p.name, age = p.age FROM (VALUES (?, ?, ?, ?), (?, ?, ?, ?)) AS p(id, name, age, id1) WHERE pt.id = p.id1",
+            List(List(1, "A", 111, 1, 2, "B", 222, 2), List(3, "C", 333, 3, 4, "D", 444, 4)),
+            executionType
+          ),
+          (
+            "UPDATE Person AS pt SET id = p.id, name = p.name, age = p.age FROM (VALUES (?, ?, ?, ?)) AS p(id, name, age, id1) WHERE pt.id = p.id1",
+            List(List(5, "E", 555, 5)),
             executionType
           )
         )

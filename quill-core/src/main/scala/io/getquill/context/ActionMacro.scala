@@ -248,13 +248,13 @@ class ActionMacro(val c: MacroContext)
                   q"($id, ($param) => ${liftUnlift.astLiftable(valuePlugLift)})"
               }
             val injectableLiftList = q"$injectableLiftListTrees"
-            val queryType = IdiomContext.QueryType.discoverFromAst(totalAst)
+            val queryType = IdiomContext.QueryType.discoverFromAst(totalAst, Some(alias.name))
             val idiomContext = IdiomContext(transpileConfig, queryType)
 
             // Splice into the code to tokenize the ast (i.e. the Expand class) and compile-time translate the AST if possible
             val expanded =
               q"""
-              val (ast, statement, executionType, _) = ${translate(ast, Quat.Unknown)}
+              val (ast, statement, executionType, _) = ${translate(ast, Quat.Unknown, Some(alias.name))}
               io.getquill.context.ExpandWithInjectables(${c.prefix}, ast, statement, idiom, naming, executionType, subBatch, $injectableLiftList)
               """
 

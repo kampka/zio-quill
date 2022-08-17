@@ -40,13 +40,7 @@ object IdiomContext {
         }
     }
 
-    def discoverFromAst(theAst: Ast): QueryType = {
-      // If it's a batch-query it has a foreach, get the alias so we can create the QueryType.BatchInsert/Update
-      val batchAlias =
-        CollectAst(theAst) {
-          case ast.Foreach(_, alias, _) => alias.name
-        }.headOption
-
+    def discoverFromAst(theAst: Ast, batchAlias: Option[String]): QueryType = {
       val actions =
         CollectAst(theAst) {
           case _: ast.Insert => QueryType.Insert

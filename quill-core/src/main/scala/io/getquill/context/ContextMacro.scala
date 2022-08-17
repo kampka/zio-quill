@@ -20,7 +20,7 @@ trait ContextMacro extends Quotation {
     summonPhaseDisable()
     q"""
       val (idiom, naming) = ${idiomAndNamingDynamic}
-      val (ast, statement, executionType, idiomContext) = ${translate(ast, topLevelQuat)}
+      val (ast, statement, executionType, idiomContext) = ${translate(ast, topLevelQuat, None)}
       (idiomContext, io.getquill.context.Expand(${c.prefix}, ast, statement, idiom, naming, executionType))
     """
   }
@@ -32,10 +32,10 @@ trait ContextMacro extends Quotation {
         Dynamic(quoted)
       }
 
-  def translate(ast: Ast, topLevelQuat: Quat): Tree =
+  def translate(ast: Ast, topLevelQuat: Quat, batchAlias: Option[String]): Tree =
     IsDynamic(ast) match {
-      case false => translateStatic(ast, topLevelQuat)
-      case true  => translateDynamic(ast, topLevelQuat)
+      case false => translateStatic(ast, topLevelQuat, batchAlias)
+      case true  => translateDynamic(ast, topLevelQuat, batchAlias)
     }
 
   abstract class TokenLift(numQuatFields: Int) extends LiftUnlift(numQuatFields) {
@@ -56,11 +56,12 @@ trait ContextMacro extends Quotation {
     }
   }
 
-  private def translateStatic(ast: Ast, topLevelQuat: Quat): Tree = {
+  private def translateStatic(ast: Ast, topLevelQuat: Quat, batchAlias: Option[String]): Tree = {
     val liftUnlift = new { override val mctx: c.type = c } with TokenLift(ast.countQuatFields)
     import liftUnlift._
     val transpileConfig = summonTranspileConfig()
-    val idiomContext = IdiomContext(transpileConfig, IdiomContext.QueryType.discoverFromAst(ast))
+    val queryType = IdiomContext.QueryType.discoverFromAst(ast, batchAlias)
+    val idiomContext = IdiomContext(transpileConfig, queryType)
 
     idiomAndNamingStatic match {
       case Success((idiom, naming)) =>
@@ -81,18 +82,18 @@ trait ContextMacro extends Quotation {
         q"($normalizedAst, ${statement: Token}, io.getquill.context.ExecutionType.Static, ${ConfigLiftables.transpileContextLiftable(idiomContext)})"
       case Failure(ex) =>
         c.info(s"Can't translate query at compile time because the idiom and/or the naming strategy aren't known at this point.")
-        translateDynamic(ast, topLevelQuat)
+        translateDynamic(ast, topLevelQuat, batchAlias)
     }
   }
 
-  private def translateDynamic(ast: Ast, topLevelQuat: Quat): Tree = {
+  private def translateDynamic(ast: Ast, topLevelQuat: Quat, batchAlias: Option[String]): Tree = {
     val liftUnlift = new { override val mctx: c.type = c } with TokenLift(ast.countQuatFields)
     import liftUnlift._
     val liftQuat: Liftable[Quat] = liftUnlift.quatLiftable
     val transpileConfig = summonTranspileConfig()
     val transpileConfigExpr = ConfigLiftables.transpileConfigLiftable(transpileConfig)
     // Compile-time AST might have Dynamic parts, we need those resoved (i.e. at runtime to be able to get the query type)
-    val queryTypeExpr = q"_root_.io.getquill.IdiomContext.QueryType.discoverFromAst($ast)"
+    val queryTypeExpr = q"_root_.io.getquill.IdiomContext.QueryType.discoverFromAst($ast, $batchAlias)"
     c.info("Dynamic query")
     val translateMethod = if (io.getquill.util.Messages.cacheDynamicQueries) {
       q"idiom.translateCached"
