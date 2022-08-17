@@ -21,22 +21,20 @@ class ActionMacro(val c: MacroContext)
   def translateQuery(quoted: Tree): Tree =
     translateQueryPrettyPrint(quoted, q"false")
 
-  def translateQueryPrettyPrint(quoted: Tree, prettyPrint: Tree): Tree =
-    expand(extractAst(quoted), inferQuat(quoted.tpe)) match {
-      // Leave the code in this match-form in case we want `expand` to return a tuple in the future
-      case expanded =>
-        c.untypecheck {
-          q"""
-            ..${EnableReflectiveCalls(c)}
-            val (idiomContext, expanded) = $expanded
-            ${c.prefix}.translateQuery(
-              expanded.string,
-              expanded.prepare,
-              prettyPrint = ${prettyPrint}
-            )(io.getquill.context.ExecutionInfo.unknown, ())
-          """
-        }
+  def translateQueryPrettyPrint(quoted: Tree, prettyPrint: Tree): Tree = {
+    val expanded = expand(extractAst(quoted), inferQuat(quoted.tpe))
+    c.untypecheck {
+      q"""
+        ..${EnableReflectiveCalls(c)}
+        val (idiomContext, expanded) = $expanded
+        ${c.prefix}.translateQuery(
+          expanded.string,
+          expanded.prepare,
+          prettyPrint = ${prettyPrint}
+        )(io.getquill.context.ExecutionInfo.unknown, ())
+      """
     }
+  }
 
   def translateBatchQuery(quoted: Tree): Tree =
     translateBatchQueryPrettyPrint(quoted, q"false")
@@ -59,56 +57,51 @@ class ActionMacro(val c: MacroContext)
         """
     }
 
-  def runAction(quoted: Tree): Tree =
-    expand(extractAst(quoted), Quat.Value) match {
-      case expanded =>
-        c.untypecheck {
-          q"""
-            ..${EnableReflectiveCalls(c)}
-            val (idiomContext, expanded) = $expanded
-            ${c.prefix}.executeAction(
-              expanded.string,
-              expanded.prepare
-            )(io.getquill.context.ExecutionInfo.unknown, ())
-          """
-        }
+  def runAction(quoted: Tree): Tree = {
+    val expanded = expand(extractAst(quoted), Quat.Value)
+    c.untypecheck {
+      q"""
+        ..${EnableReflectiveCalls(c)}
+        val (idiomContext, expanded) = $expanded
+        ${c.prefix}.executeAction(
+          expanded.string,
+          expanded.prepare
+        )(io.getquill.context.ExecutionInfo.unknown, ())
+      """
     }
+  }
 
-  def runActionReturning[T](quoted: Tree)(implicit t: WeakTypeTag[T]): Tree =
-    expand(extractAst(quoted), inferQuat(t.tpe)) match {
-      // Leave the code in this match-form in case we want `expand` to return a tuple in the future
-      case expanded =>
-        c.untypecheck {
-          q"""
-            ..${EnableReflectiveCalls(c)}
-            val (idiomContext, expanded) = $expanded
-            ${c.prefix}.executeActionReturning(
-              expanded.string,
-              expanded.prepare,
-              ${returningExtractor[T]},
-              $returningColumn
-            )(io.getquill.context.ExecutionInfo.unknown, ())
-          """
-        }
+  def runActionReturning[T](quoted: Tree)(implicit t: WeakTypeTag[T]): Tree = {
+    val expanded = expand(extractAst(quoted), inferQuat(t.tpe))
+    c.untypecheck {
+      q"""
+        ..${EnableReflectiveCalls(c)}
+        val (idiomContext, expanded) = $expanded
+        ${c.prefix}.executeActionReturning(
+          expanded.string,
+          expanded.prepare,
+          ${returningExtractor[T]},
+          $returningColumn
+        )(io.getquill.context.ExecutionInfo.unknown, ())
+      """
     }
+  }
 
-  def runActionReturningMany[T](quoted: Tree)(implicit t: WeakTypeTag[T]): Tree =
-    expand(extractAst(quoted), inferQuat(t.tpe)) match {
-      // Leave the code in this match-form in case we want `expand` to return a tuple in the future
-      case expanded =>
-        c.untypecheck {
-          q"""
-            ..${EnableReflectiveCalls(c)}
-            val (idiomContext, expanded) = $expanded
-            ${c.prefix}.executeActionReturningMany(
-              expanded.string,
-              expanded.prepare,
-              ${returningExtractor[T]},
-              $returningColumn
-            )(io.getquill.context.ExecutionInfo.unknown, ())
-          """
-        }
+  def runActionReturningMany[T](quoted: Tree)(implicit t: WeakTypeTag[T]): Tree = {
+    val expanded = expand(extractAst(quoted), inferQuat(t.tpe))
+    c.untypecheck {
+      q"""
+        ..${EnableReflectiveCalls(c)}
+        val (idiomContext, expanded) = $expanded
+        ${c.prefix}.executeActionReturningMany(
+          expanded.string,
+          expanded.prepare,
+          ${returningExtractor[T]},
+          $returningColumn
+        )(io.getquill.context.ExecutionInfo.unknown, ())
+      """
     }
+  }
 
   // Called from: run(BatchAction)
   def runBatchAction(quoted: Tree): Tree = batchAction(quoted, "executeBatchAction")
