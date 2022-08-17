@@ -10,18 +10,21 @@ case class IdiomContext(config: TranspileConfig, queryType: IdiomContext.QueryTy
 
 object IdiomContext {
   def Empty = IdiomContext(TranspileConfig.Empty, QueryType.Insert)
-  sealed trait QueryType
+  sealed trait QueryType {
+    def isBatch: Boolean
+    def batchAlias: Option[String]
+  }
   object QueryType {
     case object Select extends Regular
     case object Insert extends Regular
     case object Update extends Regular
     case object Delete extends Regular
 
-    case class BatchInsert(foreachAlias: String) extends Batch
-    case class BatchUpdate(foreachAlias: String) extends Batch
+    case class BatchInsert(foreachAlias: String) extends Batch { val batchAlias = Some(foreachAlias) }
+    case class BatchUpdate(foreachAlias: String) extends Batch { val batchAlias = Some(foreachAlias) }
 
-    sealed trait Regular extends QueryType
-    sealed trait Batch extends QueryType
+    sealed trait Regular extends QueryType { val isBatch = false; val batchAlias = None }
+    sealed trait Batch extends QueryType { val isBatch = true }
 
     object Regular {
       def unapply(qt: QueryType): Boolean =

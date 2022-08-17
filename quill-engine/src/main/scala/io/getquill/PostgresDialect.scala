@@ -1,7 +1,7 @@
 package io.getquill
 
 import java.util.concurrent.atomic.AtomicInteger
-import io.getquill.ast.{ Action, _ }
+import io.getquill.ast.{ Action, Query, _ }
 import io.getquill.ast
 import io.getquill.context.sql.idiom
 import io.getquill.context.sql.idiom.SqlIdiom.{ InsertUpdateStmt, copyIdiom }
@@ -9,7 +9,7 @@ import io.getquill.context.{ CanInsertReturningWithMultiValues, CanInsertWithMul
 import io.getquill.context.sql.idiom._
 import io.getquill.idiom.{ ScalarTagToken, Statement, Token, ValuesClauseToken }
 import io.getquill.idiom.StatementInterpolator._
-import io.getquill.norm.ProductAggregationToken
+import io.getquill.norm.{ BetaReduction, ExpandReturning, ProductAggregationToken }
 import io.getquill.util.Messages.fail
 
 import scala.annotation.tailrec
@@ -51,8 +51,32 @@ trait PostgresDialect
     s"PREPARE p${preparedStatementId.incrementAndGet.toString.token} AS $query"
   }
 
+  private[getquill] case class ReplaceReturningAlias(batchAlias: String) extends StatelessTransformer {
+    override def apply(e: ast.Action): ast.Action =
+      e match {
+        case Returning(action, alias, property) =>
+          val newAlias = alias.copy(name = batchAlias)
+          val newProperty = BetaReduction(property, alias -> newAlias)
+          Returning(action, newAlias, newProperty)
+        case ReturningGenerated(action, alias, property) =>
+          val newAlias = alias.copy(name = batchAlias)
+          val newProperty = BetaReduction(property, alias -> newAlias)
+          ReturningGenerated(action, newAlias, newProperty)
+        case _ => super.apply(e)
+      }
+  }
+
   override protected def actionTokenizer(insertEntityTokenizer: Tokenizer[Entity])(implicit astTokenizer: Tokenizer[Ast], strategy: NamingStrategy, idiomContext: IdiomContext): Tokenizer[ast.Action] =
     Tokenizer[ast.Action] {
+      //      // Don't need to check if this is supported, we know it is since it's postgres.
+      case returning @ ReturningAction(action, alias, prop) if (idiomContext.queryType.isBatch) =>
+        val batchAlias =
+          idiomContext.queryType.batchAlias.getOrElse {
+            throw new IllegalArgumentException(s"Batch alias not found in the action: ${idiomContext.queryType} but it is a batch context. This should not be possible.")
+          }
+        val returningNew = ReplaceReturningAlias(batchAlias)(returning).asInstanceOf[ReturningAction]
+        stmt"${action.token} RETURNING ${tokenizeReturningClause(returningNew, Some(returningNew.alias.name))}"
+
       case ConcatableBatchUpdate(output) =>
         output
 
@@ -126,7 +150,7 @@ trait PostgresDialect
           val (columns, values) = columnsAndValues(assignments)
           val setColumns = columns.map(col => stmt"$col = ${colsId.token}.$col").mkStmt(", ")
           val asColumns = columns.mkStmt(", ")
-          // TODO THERE'S NO TABLE-ALIAS (only a batch alias). Need to make sure to test this works.
+          // TODO IF THERE'S NO TABLE-ALIAS HERE (only a batch alias). Need to make sure to test this works.
           val output = stmt"UPDATE ${table.token} SET $setColumns FROM (VALUES ${ValuesClauseToken(stmt"(${values.mkStmt(", ")})")}) AS ${colsId.token}($asColumns)"
           Some(output)
 
@@ -139,13 +163,11 @@ trait PostgresDialect
 
 object PostgresDialect extends PostgresDialect
 
-// TODO Need to consider column conflicts & columns within columns in the original entity
 case class ReplaceLiftings(foreachIdentName: String, existingColumnNames: List[String], state: ListMap[String, ScalarTag]) extends StatefulTransformer[ListMap[String, ScalarTag]] {
 
   private def columnExists(col: String) =
     existingColumnNames.contains(col) || state.keySet.contains(col)
 
-  // TODO Check all column names for confligs
   def freshIdent(newCol: String) = {
     @tailrec
     def loop(id: String, n: Int): String = {

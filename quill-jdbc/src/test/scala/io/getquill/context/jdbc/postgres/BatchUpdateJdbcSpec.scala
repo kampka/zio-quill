@@ -33,4 +33,12 @@ class BatchUpdateValuesJdbcSpec extends BatchUpdateValuesSpec {
     context.run(update, 2)
     context.run(get).toSet mustEqual (expect.toSet)
   }
+
+  "Ex 4 - Returning" in {
+    import `Ex 4 - Returning`._
+    context.run(insert)
+    val agesReturned = context.run(update, 2)
+    agesReturned mustEqual expectedReturn
+    context.run(get).toSet mustEqual (expect.toSet)
+  }
 }
