@@ -68,14 +68,14 @@ trait PostgresDialect
 
   override protected def actionTokenizer(insertEntityTokenizer: Tokenizer[Entity])(implicit astTokenizer: Tokenizer[Ast], strategy: NamingStrategy, idiomContext: IdiomContext): Tokenizer[ast.Action] =
     Tokenizer[ast.Action] {
-      //      // Don't need to check if this is supported, we know it is since it's postgres.
-      case returning @ ReturningAction(action, alias, prop) if (idiomContext.queryType.isBatch) =>
+      // Don't need to check if this is supported, we know it is since it's postgres.
+      case returning @ ReturningAction(action: ast.Update, alias, prop) if (idiomContext.queryType.isBatch) =>
         val batchAlias =
           idiomContext.queryType.batchAlias.getOrElse {
             throw new IllegalArgumentException(s"Batch alias not found in the action: ${idiomContext.queryType} but it is a batch context. This should not be possible.")
           }
         val returningNew = ReplaceReturningAlias(batchAlias)(returning).asInstanceOf[ReturningAction]
-        stmt"${action.token} RETURNING ${tokenizeReturningClause(returningNew, Some(returningNew.alias.name))}"
+        stmt"${(action: Ast).token} RETURNING ${tokenizeReturningClause(returningNew, Some(returningNew.alias.name))}"
 
       case ConcatableBatchUpdate(output) =>
         output

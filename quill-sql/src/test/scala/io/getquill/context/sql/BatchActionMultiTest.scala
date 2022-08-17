@@ -181,7 +181,7 @@ class BatchActionMultiTest extends Spec {
 
       def expectPostgresReturning(executionType: ExecutionType) =
         makeRow(executionType)(
-          "INSERT INTO Person (id,name,age) VALUES (?, ?, ?), (?, ?, ?) RETURNING id",
+          "INSERT INTO Person (id,name,age) VALUES (?, ?, ?), (?, ?, ?) RETURNING id", //
           "INSERT INTO Person (id,name,age) VALUES (?, ?, ?) RETURNING id"
         )
 
