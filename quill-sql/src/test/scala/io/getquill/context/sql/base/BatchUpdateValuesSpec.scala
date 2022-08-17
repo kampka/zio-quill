@@ -110,6 +110,22 @@ trait BatchUpdateValuesSpec extends Spec with BeforeAndAfterEach {
         query[Contact].filter(p => p.firstName == ps.firstName).updateValue(ps).returning(_.age))
     }
     val expectedReturn = updateData.map(_.age)
-    val get = quote(query[Contact]) //
+    val get = quote(query[Contact])
+  }
+
+  object `Ex 4 - Returning Multiple` extends Adaptable {
+    case class Contact(firstName: String, lastName: String, age: Int)
+    type Row = Contact
+    override def makeData(c: ContactBase): Contact = Contact(c.firstName, c.lastName, c.age)
+
+    val insert = quote {
+      liftQuery(data: List[Contact]).foreach(ps => query[Contact].insertValue(ps))
+    }
+    val update = quote {
+      liftQuery(updateData: List[Contact]).foreach(ps =>
+        query[Contact].filter(p => p.firstName == ps.firstName).updateValue(ps).returning(r => (r.lastName, r.age)))
+    }
+    val expectedReturn = updateData.map(r => (r.lastName, r.age))
+    val get = quote(query[Contact])
   }
 }
