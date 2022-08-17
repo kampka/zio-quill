@@ -21,7 +21,7 @@ trait ContextMacro extends Quotation {
     q"""
       val (idiom, naming) = ${idiomAndNamingDynamic}
       val (ast, statement, executionType, idiomContext) = ${translate(ast, topLevelQuat)}
-      io.getquill.context.Expand(${c.prefix}, ast, statement, idiom, naming, executionType)
+      (idiomContext, io.getquill.context.Expand(${c.prefix}, ast, statement, idiom, naming, executionType))
     """
   }
 

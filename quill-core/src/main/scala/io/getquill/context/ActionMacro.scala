@@ -28,7 +28,7 @@ class ActionMacro(val c: MacroContext)
         c.untypecheck {
           q"""
             ..${EnableReflectiveCalls(c)}
-            val expanded = $expanded
+            val (idiomContext, expanded) = $expanded
             ${c.prefix}.translateQuery(
               expanded.string,
               expanded.prepare,
@@ -43,13 +43,12 @@ class ActionMacro(val c: MacroContext)
 
   def translateBatchQueryPrettyPrint(quoted: Tree, prettyPrint: Tree): Tree =
     expandBatchAction(quoted) {
-      case (batch, param, idiomContext, expanded) =>
+      case (batch, param, expanded) =>
         q"""
           ..${EnableReflectiveCalls(c)}
           ${c.prefix}.translateBatchQuery(
             $batch.map { $param =>
-              val idiomContext = $idiomContext
-              val expanded = $expanded
+              val (idiomContext, expanded) = $expanded
               (expanded.string, expanded.prepare)
             }.groupBy(_._1).map {
               case (string, items) =>
@@ -66,7 +65,7 @@ class ActionMacro(val c: MacroContext)
         c.untypecheck {
           q"""
             ..${EnableReflectiveCalls(c)}
-            val expanded = $expanded
+            val (idiomContext, expanded) = $expanded
             ${c.prefix}.executeAction(
               expanded.string,
               expanded.prepare
@@ -82,7 +81,7 @@ class ActionMacro(val c: MacroContext)
         c.untypecheck {
           q"""
             ..${EnableReflectiveCalls(c)}
-            val expanded = $expanded
+            val (idiomContext, expanded) = $expanded
             ${c.prefix}.executeActionReturning(
               expanded.string,
               expanded.prepare,
@@ -100,7 +99,7 @@ class ActionMacro(val c: MacroContext)
         c.untypecheck {
           q"""
             ..${EnableReflectiveCalls(c)}
-            val expanded = $expanded
+            val (idiomContext, expanded) = $expanded
             ${c.prefix}.executeActionReturningMany(
               expanded.string,
               expanded.prepare,
@@ -330,7 +329,7 @@ class ActionMacro(val c: MacroContext)
       })
     """
 
-  def expandBatchAction(quoted: Tree)(call: (Tree, Tree, Tree, Tree) => Tree): Tree =
+  def expandBatchAction(quoted: Tree)(call: (Tree, Tree, Tree) => Tree): Tree =
     BetaReduction(extractAst(quoted)) match {
       case totalAst @ Foreach(lift: Lift, alias, body) =>
         val batch = lift.value.asInstanceOf[Tree]
@@ -346,15 +345,8 @@ class ActionMacro(val c: MacroContext)
               }
             val (ast, _) = reifyLiftings(BetaReduction(body, alias -> nestedLift))
             val expanded = expand(ast, Quat.Unknown)
-            // Create the idiom context. Since we know the AST here is compile-time can infer QueryType directly from it
-            val idiomContext =
-              IdiomContext(
-                summonTranspileConfig(),
-                IdiomContext.QueryType.discoverFromAst(totalAst)
-              )
-            val idiomContextExpr = ConfigLiftables.transpileContextLiftable(idiomContext)
             c.untypecheck {
-              call(batch, param, idiomContextExpr, expanded)
+              call(batch, param, expanded)
             }
         }
       case other =>
@@ -365,7 +357,7 @@ class ActionMacro(val c: MacroContext)
     c.untypecheck {
       q"""
         ..${EnableReflectiveCalls(c)}
-        val expanded = ${expand(extractAst(quoted), Quat.Value)}
+        val (idiomContext, expanded) = ${expand(extractAst(quoted), Quat.Value)}
         ${c.prefix}.prepareAction(
           expanded.string,
           expanded.prepare
